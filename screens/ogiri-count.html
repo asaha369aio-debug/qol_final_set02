@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大喜利カウント画面</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  body { overflow: hidden; }
+  main {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    padding: 12px;
+  }
+
+  .block {
+    background: linear-gradient(160deg, #2a2a2a, #0a0a0a);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .block.click { cursor: pointer; user-select: none; transition: filter .12s ease, transform .08s ease; }
+  .block.click:hover { filter: brightness(1.1); }
+  .block.click:active { transform: translateY(2px); }
+
+  /* ---- PDFビューア（この下にカウント列が少し重なる） ---- */
+  .viewer {
+    flex: 0 0 60%; position: relative; z-index: 1;
+    background: linear-gradient(160deg, #4d7fe0, #2e52ad);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .viewer canvas { background: #fff; border-radius: 4px; }
+  .viewer-placeholder { color: rgba(255, 255, 255, 0.75); font-size: 22px; letter-spacing: .1em; }
+
+  .viewer-nav {
+    position: absolute; left: 0; right: 0; top: 0;
+    display: flex; gap: 1px;
+  }
+  .viewer-nav button, .viewer-nav label {
+    font: inherit; font-weight: 800; font-size: 13px; color: #fff;
+    background: rgba(0, 0, 0, 0.45); border: none; padding: 6px 0; cursor: pointer;
+    text-align: center;
+  }
+  .viewer-nav button { flex: 0 0 auto; padding: 6px 14px; }
+  .viewer-nav button:hover, .viewer-nav label:hover { background: rgba(0, 0, 0, 0.6); }
+  .viewer-nav label { flex: 0 0 auto; padding: 6px 14px; }
+  .viewer-nav label input { display: none; }
+
+  .page-indicator {
+    flex: 1 1 auto; align-self: center; text-align: center;
+    font-size: 12px; font-weight: 700; color: rgba(255, 255, 255, 0.85);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .people-box {
+    position: absolute; top: 10px; right: 10px; z-index: 2;
+    width: 110px; cursor: pointer;
+    background: #fff; color: #1a1030;
+    border: 2px solid #1a1030;
+    flex-direction: column; gap: 4px;
+    font-size: clamp(18px, 2.2vw, 26px); font-weight: 900;
+    padding: 8px 4px;
+  }
+  .people-box .sub { font-size: 11px; font-weight: 700; color: #4d5486; }
+
+  /* ---- カウント列：PDFビューアの下端に少し重ねて配置し、メモリは半透明にする ---- */
+  .columns-row {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--n, 3), 1fr);
+    gap: 16px;
+    position: relative; z-index: 2;
+    margin-top: clamp(-150px, -16vh, -80px);
+    padding: 0 4px;
+  }
+
+  .count-col { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+
+  .count-value {
+    text-align: center;
+    font-size: clamp(32px, 5vw, 56px); font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meter { flex: 1; display: flex; flex-direction: column; gap: 5px; min-height: 0; }
+  .meter .seg {
+    flex: 1; min-height: 0; border-radius: 6px;
+    border: 2px solid rgba(61, 220, 151, 0.75);
+    background: rgba(255, 255, 255, 0.1);
+    transition: background .15s ease;
+  }
+  .meter .seg.filled { background: linear-gradient(180deg, rgba(255, 229, 137, 0.78), rgba(255, 213, 74, 0.78)); }
+
+  .count-ctrl { display: grid; grid-template-columns: 15px 1fr 15px; gap: 6px; height: 46px; flex: 0 0 auto; }
+  .count-ctrl button {
+    width: 15px; height: 16px; align-self: center; justify-self: center;
+    font-weight: 900; font-size: 7px; border-radius: 4px;
+  }
+  .count-ctrl .name-input {
+    font: inherit; font-weight: 800; font-size: 15px; text-align: center;
+    color: #fff; background: linear-gradient(160deg, #4d7fe0, #2e52ad);
+    border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 10px;
+    min-width: 0; padding: 0 6px;
+  }
+
+  /* ---- 設定パネル ---- */
+  .settings-panel {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(10, 12, 30, 0.6);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settings-panel[hidden] { display: none; }
+  .settings-box {
+    width: min(340px, 90vw);
+    display: grid; gap: 14px; padding: 24px;
+    background: linear-gradient(160deg, #232a70, #141845);
+    border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+  }
+  .settings-box h2 { margin: 0; font-size: 16px; }
+  .settings-box label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+  .settings-box input {
+    font: inherit; color: var(--fg); background: rgba(0,0,0,.3);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  .settings-box .row { display: flex; gap: 10px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<main>
+  <div class="viewer" id="viewer">
+    <canvas id="pdfCanvas" hidden></canvas>
+    <div class="viewer-placeholder" id="viewerPlaceholder">PDF</div>
+
+    <div class="viewer-nav">
+      <label class="click" for="pdfInput">ファイル読みこみ<input type="file" id="pdfInput" accept="application/pdf"></label>
+      <button id="prevBtn">◀ 前のページ</button>
+      <span class="page-indicator" id="pageIndicator" hidden></span>
+      <button id="nextBtn">次のページ ▶</button>
+    </div>
+
+    <div class="block people-box click" id="peopleBox">
+      人数
+      <span class="sub" id="peopleSub">3人</span>
+    </div>
+  </div>
+
+  <div class="columns-row" id="columnsRow"></div>
+</main>
+
+<div class="settings-panel" id="settingsPanel" hidden>
+  <div class="settings-box">
+    <h2>人数・カウント設定</h2>
+    <label>
+      人数
+      <input type="number" id="countInput" min="1" max="6" value="3">
+    </label>
+    <label>
+      カウントの最大値（開始時の数）
+      <input type="number" id="maxInput" min="1" max="99" value="10">
+    </label>
+    <div class="row">
+      <button class="btn ghost sm" id="settingsCancel">閉じる</button>
+      <button class="btn sm" id="settingsApply">適用</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/vendor/pdfjs/pdf.min.js"></script>
+<script src="../js/common.js"></script>
+<script src="../js/pdf-sync.js"></script>
+<script src="../js/pdf-render.js"></script>
+<script>
+const { $, $$, mountTopbar, clamp, pdfSync, pdfRender } = QOL;
+
+mountTopbar('oogiri_count');
+
+// ---- PDFビューア（大喜利画面とページ・PDF本体を共有する） ----
+const pdfCanvas = $('#pdfCanvas');
+const placeholder = $('#viewerPlaceholder');
+const pageIndicator = $('#pageIndicator');
+let pdfDoc = null;
+let page = pdfSync.getPage();
+
+async function showPage() {
+  if (!pdfDoc) return;
+  page = await pdfRender.renderPage(pdfDoc, page, pdfCanvas);
+  pageIndicator.textContent = `${page} / ${pdfDoc.numPages}`;
+}
+
+async function initPdf() {
+  const file = await pdfSync.loadPdf();
+  if (!file) return;
+  pdfDoc = await pdfRender.loadDocument(file);
+  pdfCanvas.hidden = false;
+  placeholder.hidden = true;
+  pageIndicator.hidden = false;
+  showPage();
+}
+
+$('#pdfInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    await pdfSync.savePdf(file);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  pdfDoc = await pdfRender.loadDocument(file);
+  page = pdfSync.getPage();
+  pdfCanvas.hidden = false;
+  placeholder.hidden = true;
+  pageIndicator.hidden = false;
+  showPage();
+});
+
+$('#prevBtn').addEventListener('click', () => {
+  if (!pdfDoc) return;
+  page = Math.max(1, page - 1);
+  pdfSync.setPage(page);
+  showPage();
+});
+$('#nextBtn').addEventListener('click', () => {
+  if (!pdfDoc) return;
+  page = Math.min(pdfDoc.numPages, page + 1);
+  pdfSync.setPage(page);
+  showPage();
+});
+pdfSync.onPageChange((n) => {
+  page = n;
+  showPage();
+});
+window.addEventListener('resize', () => showPage());
+
+initPdf();
+
+// ---- 人数分のカウント列 ----
+const columnsRow = $('#columnsRow');
+const peopleSub = $('#peopleSub');
+
+let playerCount = 3;
+let maxCount = 10;
+let counts = [];
+let names = [];
+
+// ---- 設定・カウントの保持（画面切り替えでiframeが再読み込みされても消えないようにする） ----
+// タブを閉じるまで保持したいのでsessionStorageを使う
+const STATE_STORAGE_KEY = 'qol:ogiri-count-state';
+function saveCountState() {
+  try {
+    sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({ playerCount, maxCount, counts, names }));
+  } catch (err) { /* 保存できなくても致命的ではないので無視 */ }
+}
+function loadCountState() {
+  try {
+    const raw = sessionStorage.getItem(STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!Number.isFinite(saved.playerCount) || !Number.isFinite(saved.maxCount)) return null;
+    return saved;
+  } catch (err) { return null; }
+}
+
+function renderColumns() {
+  columnsRow.style.setProperty('--n', playerCount);
+  columnsRow.innerHTML = '';
+
+  for (let i = 0; i < playerCount; i++) {
+    const col = document.createElement('div');
+    col.className = 'count-col';
+
+    let segsHtml = '';
+    for (let s = 0; s < maxCount; s++) segsHtml += '<div class="seg"></div>';
+
+    col.innerHTML = `
+      <div class="count-value" id="countValue${i}"></div>
+      <div class="meter" id="meter${i}">${segsHtml}</div>
+      <div class="count-ctrl">
+        <button class="block click" data-action="dec" data-idx="${i}">−</button>
+        <input class="name-input" id="name${i}" value="${names[i] ?? `プレイヤー${i + 1}`}">
+        <button class="block click" data-action="inc" data-idx="${i}">＋</button>
+      </div>
+    `;
+    columnsRow.appendChild(col);
+  }
+
+  $$('.count-ctrl button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.idx);
+      const delta = btn.dataset.action === 'inc' ? 1 : -1;
+      counts[i] = clamp(counts[i] + delta, 0, maxCount);
+      renderCount(i);
+      saveCountState();
+    });
+  });
+  $$('.name-input').forEach((input, i) => {
+    input.addEventListener('input', () => { names[i] = input.value; saveCountState(); });
+  });
+
+  counts.forEach((_, i) => renderCount(i));
+}
+
+function renderCount(i) {
+  $(`#countValue${i}`).textContent = counts[i];
+  $$(`#meter${i} .seg`).forEach((seg, s) => {
+    seg.classList.toggle('filled', s >= maxCount - counts[i]);
+  });
+}
+
+function applyPlayerSettings(nextCount, nextMax) {
+  playerCount = clamp(nextCount, 1, 6);
+  maxCount = clamp(nextMax, 1, 99);
+  const prevNames = names;
+  names = Array.from({ length: playerCount }, (_, i) => prevNames[i] ?? `プレイヤー${i + 1}`);
+  counts = Array.from({ length: playerCount }, () => 0);
+  peopleSub.textContent = `${playerCount}人`;
+  renderColumns();
+  saveCountState();
+}
+
+// 画面切り替え直後（iframe再読み込み直後）は、保存されていた人数・カウントを復元する
+const savedCountState = loadCountState();
+if (savedCountState) {
+  playerCount = clamp(savedCountState.playerCount, 1, 6);
+  maxCount = clamp(savedCountState.maxCount, 1, 99);
+  names = Array.from({ length: playerCount }, (_, i) => savedCountState.names?.[i] ?? `プレイヤー${i + 1}`);
+  counts = Array.from({ length: playerCount }, (_, i) => clamp(savedCountState.counts?.[i] ?? 0, 0, maxCount));
+  peopleSub.textContent = `${playerCount}人`;
+  renderColumns();
+} else {
+  applyPlayerSettings(playerCount, maxCount);
+}
+
+// ---- 人数・カウント設定パネル ----
+const settingsPanel = $('#settingsPanel');
+
+function openSettings() {
+  $('#countInput').value = playerCount;
+  $('#maxInput').value = maxCount;
+  settingsPanel.hidden = false;
+}
+function closeSettings() { settingsPanel.hidden = true; }
+
+$('#peopleBox').addEventListener('click', openSettings);
+$('#settingsCancel').addEventListener('click', closeSettings);
+$('#settingsApply').addEventListener('click', () => {
+  applyPlayerSettings(Number($('#countInput').value) || playerCount, Number($('#maxInput').value) || maxCount);
+  closeSettings();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大喜利画面</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  body { overflow: hidden; }
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .block {
+    background: linear-gradient(160deg, #2a2a2a, #0a0a0a);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .block.click { cursor: pointer; user-select: none; transition: filter .12s ease, transform .08s ease; }
+  .block.click:hover { filter: brightness(1.1); }
+  .block.click:active { transform: translateY(2px); }
+
+  /* ---- 上段：ジャンル / タイマー / START・STOP・RESET ---- */
+  .top-row {
+    grid-column: 1 / 3;
+    display: flex; align-items: stretch; gap: 10px;
+  }
+
+  .genre-box {
+    flex: 0 0 340px;
+    font-size: clamp(22px, 3vw, 40px); font-weight: 900;
+    cursor: pointer;
+  }
+  .genre-box input {
+    width: 100%; background: transparent; border: none; color: #fff;
+    font: inherit; text-align: center; outline: none;
+  }
+
+  .timer-area { flex: 1; display: flex; align-items: stretch; gap: 10px; min-width: 0; }
+  .plus10 { flex: 0 0 90px; font-size: clamp(16px, 2vw, 26px); font-weight: 800; }
+  .timer-display {
+    flex: 1;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: clamp(36px, 6vw, 76px); font-weight: 900; letter-spacing: .06em;
+    background: linear-gradient(160deg, #f6ecd9, #ecdfc4);
+    border: 2px solid #b9a06a;
+    color: #3a2e1a;
+    box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .4), 0 6px 16px rgba(0, 0, 0, .35);
+  }
+  .timer-display.warn { color: #a06a1a; }
+  .timer-display.danger { color: #a3271f; }
+
+  .transport { flex: 0 0 200px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; gap: 6px; }
+  .transport button {
+    font: inherit; font-weight: 800; font-size: 15px; color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 10px; cursor: pointer;
+  }
+  #startBtn { background: linear-gradient(160deg, #3ddc97, #1c9f6a); }
+  #stopBtn  { background: linear-gradient(160deg, #ff8a3d, #d9631a); }
+  #resetBtn {
+    grid-column: 1 / 3; background: linear-gradient(160deg, #ff5c8a, #c22a58);
+    font-size: 12px; padding: 4px; min-height: 22px;
+  }
+
+  /* ---- 下段：PDFビューア / 右サイド操作 ---- */
+  .viewer {
+    position: relative; min-height: 0;
+    background: linear-gradient(160deg, #4d7fe0, #2e52ad);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 12px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .viewer canvas { background: #fff; border-radius: 4px; }
+  .viewer-placeholder { color: rgba(255, 255, 255, 0.75); font-size: 22px; letter-spacing: .1em; }
+
+  .page-indicator {
+    position: absolute; right: 8px; bottom: 8px;
+    background: rgba(0, 0, 0, 0.55); color: #fff;
+    font-size: 12px; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+
+  .side { display: grid; grid-template-rows: 2fr 1fr 1fr 1fr; gap: 10px; width: 130px; }
+  .side .block { flex-direction: column; gap: 4px; font-size: 16px; font-weight: 800; line-height: 1.4; }
+  .side label.block input { display: none; }
+
+  /* ---- 設定パネル ---- */
+  .settings-panel {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(10, 12, 30, 0.6);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settings-panel[hidden] { display: none; }
+  .settings-box {
+    width: min(360px, 90vw);
+    display: grid; gap: 14px; padding: 24px;
+    background: linear-gradient(160deg, #232a70, #141845);
+    border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+  }
+  .settings-box h2 { margin: 0; font-size: 16px; }
+  .settings-box label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+  .settings-box input {
+    font: inherit; color: var(--fg); background: rgba(0,0,0,.3);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  .settings-box .mmss { display: flex; gap: 8px; align-items: center; }
+  .settings-box .mmss input { width: 70px; text-align: center; }
+  .settings-box .row { display: flex; gap: 10px; justify-content: flex-end; }
+  .settings-box .hint { font-size: 12px; opacity: .8; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top-row">
+    <div class="block genre-box click" id="genreBox">印象</div>
+
+    <div class="timer-area">
+      <button class="block plus10" data-delta="-10">−10s</button>
+      <div class="block timer-display" id="timerDisplay">02:00</div>
+      <button class="block plus10" data-delta="10">+10s</button>
+    </div>
+
+    <div class="transport">
+      <button id="startBtn">START</button>
+      <button id="stopBtn">STOP</button>
+      <button id="resetBtn">RESET</button>
+    </div>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <canvas id="pdfCanvas" hidden></canvas>
+    <div class="viewer-placeholder" id="viewerPlaceholder">PDF</div>
+    <div class="page-indicator" id="pageIndicator" hidden></div>
+  </div>
+
+  <div class="side">
+    <label class="block click file" for="pdfInput">ファイル読み込み<input type="file" id="pdfInput" accept="application/pdf"></label>
+    <button class="block click" id="settingsBtn">設定</button>
+    <button class="block click" id="prevBtn">前の<br>ページ</button>
+    <button class="block click" id="nextBtn">次の<br>ページ</button>
+  </div>
+</main>
+
+<div class="settings-panel" id="settingsPanel" hidden>
+  <div class="settings-box">
+    <h2>設定</h2>
+    <span class="hint">お題ごとのタイマー初期値（左上の印象ボックスをクリックして切り替えたとき、この時間にリセットされます）</span>
+    <label>
+      印象(3人)
+      <span class="mmss">
+        <input type="number" id="min0" min="0" max="59" value="2"> 分
+        <input type="number" id="sec0" min="0" max="59" value="30"> 秒
+      </span>
+    </label>
+    <label>
+      印象(全員)
+      <span class="mmss">
+        <input type="number" id="min1" min="0" max="59" value="3"> 分
+        <input type="number" id="sec1" min="0" max="59" value="0"> 秒
+      </span>
+    </label>
+    <label>
+      一発
+      <span class="mmss">
+        <input type="number" id="min2" min="0" max="59" value="1"> 分
+        <input type="number" id="sec2" min="0" max="59" value="0"> 秒
+      </span>
+    </label>
+    <div class="row">
+      <button class="btn ghost sm" id="settingsCancel">閉じる</button>
+      <button class="btn sm" id="settingsApply">適用</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/vendor/pdfjs/pdf.min.js"></script>
+<script src="../js/common.js"></script>
+<script src="../js/pdf-sync.js"></script>
+<script src="../js/pdf-render.js"></script>
+<script>
+const { $, $$, mountTopbar, clamp, pdfSync, pdfRender } = QOL;
+
+mountTopbar('oogiri');
+
+// ---- お題（3択）：クリックで切り替え、各お題の初期値は設定画面で編集できる ----
+const GENRE_OPTIONS = [
+  { label: '印象(3人)', seconds: 150 }, // 2分半
+  { label: '印象(全員)', seconds: 180 }, // 3分
+  { label: '一発', seconds: 60 },        // 1分
+];
+let genreIndex = 0;
+
+// ---- タイマー ----
+let initialSeconds = GENRE_OPTIONS[genreIndex].seconds;
+let remain = initialSeconds;
+let timerId = null;
+
+const timerDisplay = $('#timerDisplay');
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function renderTimer() {
+  timerDisplay.textContent = formatTime(remain);
+  timerDisplay.classList.toggle('warn', remain <= 30 && remain > 10);
+  timerDisplay.classList.toggle('danger', remain <= 10);
+}
+
+function startTimer() {
+  if (timerId) return;
+  timerId = setInterval(() => {
+    remain = Math.max(0, remain - 1);
+    renderTimer();
+    if (remain === 0) stopTimer();
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+}
+
+function resetTimer() {
+  stopTimer();
+  remain = initialSeconds;
+  renderTimer();
+}
+
+$('#startBtn').addEventListener('click', startTimer);
+$('#stopBtn').addEventListener('click', stopTimer);
+$('#resetBtn').addEventListener('click', resetTimer);
+$$('.plus10').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    remain = clamp(remain + Number(btn.dataset.delta), 0, 5999);
+    renderTimer();
+  })
+);
+
+// ---- PDFビューア（大喜利カウント画面とページ・PDF本体を共有する） ----
+const pdfCanvas = $('#pdfCanvas');
+const placeholder = $('#viewerPlaceholder');
+const pageIndicator = $('#pageIndicator');
+let pdfDoc = null;
+let page = pdfSync.getPage();
+
+async function showPage() {
+  if (!pdfDoc) return;
+  page = await pdfRender.renderPage(pdfDoc, page, pdfCanvas);
+  pageIndicator.textContent = `${page} / ${pdfDoc.numPages}`;
+}
+
+async function initPdf() {
+  const file = await pdfSync.loadPdf();
+  if (!file) return;
+  pdfDoc = await pdfRender.loadDocument(file);
+  pdfCanvas.hidden = false;
+  placeholder.hidden = true;
+  pageIndicator.hidden = false;
+  showPage();
+}
+
+$('#pdfInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    await pdfSync.savePdf(file);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  pdfDoc = await pdfRender.loadDocument(file);
+  page = pdfSync.getPage();
+  pdfCanvas.hidden = false;
+  placeholder.hidden = true;
+  pageIndicator.hidden = false;
+  showPage();
+});
+
+$('#prevBtn').addEventListener('click', () => {
+  if (!pdfDoc) return;
+  page = Math.max(1, page - 1);
+  pdfSync.setPage(page);
+  showPage();
+});
+$('#nextBtn').addEventListener('click', () => {
+  if (!pdfDoc) return;
+  page = Math.min(pdfDoc.numPages, page + 1);
+  pdfSync.setPage(page);
+  showPage();
+});
+pdfSync.onPageChange((n) => {
+  page = n;
+  showPage();
+});
+window.addEventListener('resize', () => showPage());
+
+initPdf();
+
+// ---- お題ボックス：クリックで3択を順番に切り替える ----
+const genreBox = $('#genreBox');
+const settingsPanel = $('#settingsPanel');
+
+function applyGenre(index) {
+  genreIndex = ((index % GENRE_OPTIONS.length) + GENRE_OPTIONS.length) % GENRE_OPTIONS.length;
+  genreBox.textContent = GENRE_OPTIONS[genreIndex].label;
+  initialSeconds = GENRE_OPTIONS[genreIndex].seconds;
+  resetTimer();
+}
+genreBox.addEventListener('click', () => applyGenre(genreIndex + 1));
+
+// ---- 設定パネル：お題ごとのタイマー初期値を編集 ----
+function openSettings() {
+  GENRE_OPTIONS.forEach((opt, i) => {
+    $(`#min${i}`).value = Math.floor(opt.seconds / 60);
+    $(`#sec${i}`).value = opt.seconds % 60;
+  });
+  settingsPanel.hidden = false;
+}
+function closeSettings() { settingsPanel.hidden = true; }
+
+$('#settingsBtn').addEventListener('click', openSettings);
+$('#settingsCancel').addEventListener('click', closeSettings);
+$('#settingsApply').addEventListener('click', () => {
+  GENRE_OPTIONS.forEach((opt, i) => {
+    const m = clamp(Number($(`#min${i}`).value) || 0, 0, 59);
+    const s = clamp(Number($(`#sec${i}`).value) || 0, 0, 59);
+    opt.seconds = m * 60 + s;
+  });
+  initialSeconds = GENRE_OPTIONS[genreIndex].seconds;
+  resetTimer();
+  closeSettings();
+});
+
+applyGenre(0);
+renderTimer();
+</script>
+</body>
+</html>

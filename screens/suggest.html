@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サジェスト画面</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  body { overflow: hidden; }
+
+  .viewer {
+    flex: 1; min-height: 0; margin: 14px;
+    position: relative;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.5);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(160deg, #9db3cf, #5c7599);
+  }
+
+  .header-row {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 24px;
+    padding: 16px 24px 6px;
+    background: linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,0));
+  }
+  .dots { display: flex; gap: 8px; }
+  .dot { width: 20px; height: 20px; border-radius: 5px; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+  .dot.red { background: #d9382f; }
+  .dot.yellow { background: #ffd54a; }
+  .dot.blue { background: #3d6bd9; }
+  .title { flex: 1; text-align: center; margin: 0 44px 0 0; font-size: clamp(17.6px, 2.4vw, 25.6px); font-weight: 900; color: #14182f; }
+
+  /* ---- 上部：検索ワード欄 + Excel読込 + ナンバー選択 ---- */
+  .top-controls {
+    flex: 0 0 auto;
+    display: flex; align-items: flex-start; justify-content: flex-end;
+    gap: 12px;
+    padding: 6px 28px 14px;
+  }
+
+  .answer-box {
+    width: min(420px, 42%);
+    background: #fff;
+    border: 3px solid #35348f;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center;
+    padding: 14px;
+    min-height: 60px;
+    cursor: pointer;
+    transition: transform .1s ease;
+  }
+  .answer-box:hover { transform: translateY(-2px); }
+  .answer-box #answerText {
+    font-size: clamp(16px, 2vw, 22px);
+    font-weight: 700;
+    color: #35348f;
+    text-align: center;
+  }
+  .answer-box #answerText.placeholder { color: #9aa0c0; }
+
+  .load-col { flex: 0 0 130px; display: grid; gap: 8px; }
+  .load-col label,
+  .load-col select {
+    font: inherit; font-weight: 800; font-size: 13px; color: #fff;
+    background: linear-gradient(160deg, #5f82e0, #35519f);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 9px 6px; cursor: pointer;
+    min-height: 36px;
+    transition: filter .12s ease, transform .08s ease;
+  }
+  .load-col label:hover, .load-col select:hover { filter: brightness(1.1); }
+  .load-col label:active { transform: translateY(2px); }
+  .load-col input { display: none; }
+  .load-col select { appearance: none; text-align-last: center; background: #3d5bc7; }
+  .load-col select:disabled { opacity: .8; cursor: not-allowed; }
+
+  /* ---- 上部：理由の表示/非表示ボタン（右上のボックスの下） ---- */
+  .reason-toggles {
+    flex: 0 0 auto;
+    display: flex; justify-content: flex-end;
+    gap: 8px;
+    padding: 0 28px 10px;
+  }
+  .toggle-btn {
+    width: 36px; height: 36px;
+    font: inherit; font-weight: 900; font-size: 18px; color: #fff;
+    background: linear-gradient(160deg, #5f82e0, #35519f);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,.25);
+    cursor: pointer;
+    transition: filter .12s ease, transform .08s ease;
+  }
+  .toggle-btn:hover { filter: brightness(1.1); }
+  .toggle-btn:active { transform: translateY(2px); }
+  .toggle-btn.active { background: #ffd54a; color: #1c2454; }
+
+  /* 中央のオブジェクト（吹き出し）を、中央〜フッターの間くらいの高さに配置するための余白 */
+  .spacer-top { flex: 5 1 0; min-height: 0; }
+  .spacer-bottom { flex: 1 1 0; min-height: 0; }
+
+  /* ---- 中央：1〜5番目理由の吹き出し（表示/非表示ボタンで個別に表示） ---- */
+  .reasons-row {
+    flex: 0 0 auto;
+    height: 17vh;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: clamp(12px, 2vw, 28px);
+    padding: 4px 28px 22px;
+    align-items: stretch;
+  }
+
+  .reason-box {
+    position: relative;
+    background: #f7c948;
+    border: 3px solid #1c2454;
+    border-radius: 4px;
+    padding: 10px 12px 18px;
+    display: flex; align-items: flex-start; justify-content: flex-start;
+    font-size: clamp(17px, 1.82vw, 22px);
+    font-weight: 700;
+    color: #1c2454;
+    text-align: left;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .reason-box.empty { color: #8a8560; }
+  .reason-box.hidden { visibility: hidden; }
+  .reason-box::before,
+  .reason-box::after {
+    content: '';
+    position: absolute;
+    left: 20%;
+    width: 0; height: 0;
+    border-style: solid;
+  }
+  .reason-box::before {
+    bottom: -16px;
+    border-width: 18px 13px 0 0;
+    border-color: #1c2454 transparent transparent transparent;
+  }
+  .reason-box::after {
+    bottom: -13px;
+    left: calc(20% + 2px);
+    border-width: 14px 10px 0 0;
+    border-color: #f7c948 transparent transparent transparent;
+  }
+
+  .question-banner {
+    flex: 0 0 auto;
+    margin: 0 20px;
+    background: #35348f;
+    color: #fff;
+    font-size: clamp(18px, 2.6vw, 28px);
+    font-weight: 900;
+    padding: 16px 24px;
+    border-radius: 10px 10px 0 0;
+  }
+
+  /* ---- このワードで検索されている言葉は？ の候補①〜⑤（従来のC〜G列、クリックで表示/非表示） ---- */
+  .numbers-panel {
+    flex: 0 0 auto;
+    margin: 0 20px 20px;
+    background: #fff;
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 10px 26px rgba(0,0,0,.3);
+    padding: 18px 20px 14px;
+  }
+  .items-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .item-col { display: grid; gap: 8px; }
+
+  .item-box {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 48px;
+    font-size: clamp(18px, 2.4vw, 30px);
+    font-weight: 900;
+    color: #35348f;
+    text-align: center;
+    overflow: hidden;
+    word-break: break-word;
+  }
+  .item-box.empty { color: #b9bfe0; }
+  .item-box.click { cursor: pointer; transition: transform .1s ease; }
+  .item-box.click:hover { transform: translateY(-2px); }
+
+  .item-bar { height: 3px; border-radius: 999px; background: #35348f; }
+
+  .nav-row {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    padding: 0 20px 14px;
+  }
+  .page-indicator { font-size: 13px; font-weight: 700; color: #eef1ff; opacity: .9; }
+</style>
+</head>
+<body>
+<div class="viewer" id="viewer">
+  <div class="header-row">
+    <div class="dots">
+      <span class="dot red"></span><span class="dot yellow"></span><span class="dot blue"></span>
+    </div>
+    <h1 class="title">kensaku</h1>
+  </div>
+
+  <div class="top-controls">
+    <div class="answer-box sfx" id="answerBox">
+      <span id="answerText" class="placeholder">検索ワード</span>
+    </div>
+    <div class="load-col">
+      <label class="sfx" for="fileInput">📄 Excelを<br>読み込む<input type="file" id="fileInput" accept=".xlsx"></label>
+      <label class="sfx" for="seInput">🔊 SEを<br>読み込む<input type="file" id="seInput" accept="audio/*"></label>
+      <select id="numberSelect" title="ナンバー選択" disabled>
+        <option>0</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="reason-toggles" id="reasonToggles"></div>
+  <div class="spacer-top"></div>
+  <div class="reasons-row" id="reasonsRow"></div>
+  <div class="spacer-bottom"></div>
+
+  <div class="question-banner">このワードで検索されている言葉は？</div>
+  <div class="numbers-panel">
+    <div class="items-row" id="itemsRow"></div>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn ghost sm sfx" id="prevBtn">← 前</button>
+    <span class="page-indicator" id="pageIndicator">0 / 0件</span>
+    <button class="btn ghost sm sfx" id="nextBtn">次 →</button>
+  </div>
+</div>
+
+<script src="../js/common.js"></script>
+<script src="../js/xlsx-lite.js"></script>
+<script src="../js/xlsx-sync.js"></script>
+<script>
+const { $, $$, mountTopbar, xlsxSync } = QOL;
+const { readSheet } = QOL.xlsxLite;
+
+mountTopbar('🔍 サジェスト画面');
+
+const CIRCLED = ['①', '②', '③', '④', '⑤'];
+const REASON_PLACEHOLDERS = ['ここに1番目理由', 'ここに2番目理由', 'ここに3番目理由', 'ここに4番目理由', 'ここに5番目理由'];
+
+let allRows = []; // { no, answer, items: [候補1〜5], reasons: [理由1〜5] }
+let currentIndex = -1;
+
+const answerBox = $('#answerBox');
+const answerText = $('#answerText');
+const itemsRow = $('#itemsRow');
+const reasonsRow = $('#reasonsRow');
+const reasonToggles = $('#reasonToggles');
+const pageIndicator = $('#pageIndicator');
+const prevBtn = $('#prevBtn');
+const nextBtn = $('#nextBtn');
+const numberSelect = $('#numberSelect');
+
+// 理由1〜5は初期状態では非表示。右上ボックス下のボタンで個別に表示/非表示を切り替える
+let reasonVisible = [false, false, false, false, false];
+
+function buildReasonToggles() {
+  reasonToggles.innerHTML = '';
+  reasonVisible.forEach((visible, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toggle-btn sfx' + (visible ? ' active' : '');
+    btn.textContent = CIRCLED[i];
+    btn.addEventListener('click', () => {
+      reasonVisible[i] = !reasonVisible[i];
+      btn.classList.toggle('active', reasonVisible[i]);
+      reasonsRow.children[i]?.classList.toggle('hidden', !reasonVisible[i]);
+    });
+    reasonToggles.appendChild(btn);
+  });
+}
+
+function resetReasonToggles() {
+  reasonVisible = [false, false, false, false, false];
+  [...reasonToggles.children].forEach((btn) => btn.classList.remove('active'));
+}
+
+// ---- SE（効果音）。ナンバー選択以外のボタンを押したときに鳴らす ----
+// タブを閉じるまで保持したいのでsessionStorageにdata URLとして保存する
+const SE_STORAGE_KEY = 'qol:suggest-se';
+let seAudio = null;
+
+function setSE(dataUrl) {
+  seAudio = dataUrl ? new Audio(dataUrl) : null;
+  if (seAudio) seAudio.preload = 'auto';
+}
+
+function playSE() {
+  if (!seAudio) return;
+  seAudio.currentTime = 0;
+  seAudio.play().catch(() => {});
+}
+
+(() => {
+  try {
+    const saved = sessionStorage.getItem(SE_STORAGE_KEY);
+    if (saved) setSE(saved);
+  } catch (err) { /* 読み込めなくても致命的ではないので無視 */ }
+})();
+
+$('#seInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    setSE(reader.result);
+    try { sessionStorage.setItem(SE_STORAGE_KEY, reader.result); } catch (err) { /* 保存できなくても再生自体は可能 */ }
+  };
+  reader.readAsDataURL(file);
+});
+
+// クリックで表示/非表示や画面遷移を行う要素すべてに.sfxを付けてあり、
+// ナンバー選択（select）だけは対象外にしている
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.sfx')) playSE();
+});
+
+answerBox.addEventListener('click', () => {
+  const row = allRows[currentIndex];
+  if (!row) return;
+  const revealed = answerBox.classList.toggle('open');
+  if (revealed) {
+    answerText.textContent = row.answer || '（答え未設定）';
+    answerText.classList.remove('placeholder');
+  } else {
+    answerText.textContent = '検索ワード';
+    answerText.classList.add('placeholder');
+  }
+});
+
+// ---- 1〜5番目理由（右上ボックス下の①〜⑤ボタンで個別に表示/非表示） ----
+function renderReasons(row) {
+  reasonsRow.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const value = row ? row.reasons[i] : '';
+
+    const box = document.createElement('div');
+    box.className = value ? 'reason-box' : 'reason-box empty';
+    if (!reasonVisible[i]) box.classList.add('hidden');
+    box.textContent = value || REASON_PLACEHOLDERS[i];
+
+    reasonsRow.appendChild(box);
+  }
+}
+
+// ---- このワードで検索されている言葉は？ の候補①〜⑤（クリックで表示/非表示） ----
+function renderItems(row) {
+  itemsRow.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const value = row ? row.items[i] : '';
+
+    const col = document.createElement('div');
+    col.className = 'item-col';
+
+    const box = document.createElement('div');
+    box.className = value ? 'item-box click sfx' : 'item-box empty';
+    box.textContent = CIRCLED[i];
+    if (value) {
+      box.addEventListener('click', () => {
+        const revealed = box.classList.toggle('open');
+        box.textContent = revealed ? value : CIRCLED[i];
+      });
+    }
+
+    const bar = document.createElement('div');
+    bar.className = 'item-bar';
+
+    col.append(box, bar);
+    itemsRow.appendChild(col);
+  }
+}
+
+function selectRow(index) {
+  currentIndex = index;
+  const row = allRows[currentIndex];
+  if (!row) return;
+
+  numberSelect.value = String(currentIndex);
+  answerText.textContent = '検索ワード';
+  answerText.classList.add('placeholder');
+  answerBox.classList.remove('open');
+  resetReasonToggles();
+  renderReasons(row);
+  renderItems(row);
+
+  pageIndicator.textContent = `${currentIndex + 1} / ${allRows.length}件`;
+  prevBtn.disabled = currentIndex <= 0;
+  nextBtn.disabled = currentIndex >= allRows.length - 1;
+}
+
+prevBtn.addEventListener('click', () => {
+  if (currentIndex > 0) selectRow(currentIndex - 1);
+});
+nextBtn.addEventListener('click', () => {
+  if (currentIndex < allRows.length - 1) selectRow(currentIndex + 1);
+});
+numberSelect.addEventListener('change', () => selectRow(Number(numberSelect.value)));
+
+// ---- Excel読み込み（「サジェスト」シートを使う。全画面で1つのExcelを共有する） ----
+// A列 → ナンバー（ナンバー選択ドロップダウンの表示名）
+// B列 → 答え（答え欄にそのまま表示）
+// C〜G列 → 候補ワード1〜5（このワードで検索されている言葉は？ の①〜⑤、クリックで表示/非表示）
+// I〜M列 → 理由1〜5（黄色い吹き出し1〜5番目理由に常時表示）
+// 1行目はヘッダーとして除外し、2行目以降のデータだけを使う
+async function applyWorkbook(file) {
+  const rows = await readSheet(file, /サジェスト/);
+  const dataRows = rows.slice(1);
+
+  const parsed = dataRows
+    .map((r) => ({
+      no: (r[0] ?? '').trim(),
+      answer: (r[1] ?? '').trim(),
+      items: [2, 3, 4, 5, 6].map((col) => (r[col] ?? '').trim()),
+      reasons: [8, 9, 10, 11, 12].map((col) => (r[col] ?? '').trim()),
+    }))
+    .filter((row) => row.no);
+
+  if (!parsed.length) throw new Error('A列にナンバーが見つかりませんでした');
+
+  allRows = parsed;
+  numberSelect.disabled = false;
+  numberSelect.innerHTML = '';
+  allRows.forEach((row, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = row.no;
+    numberSelect.appendChild(opt);
+  });
+  selectRow(0);
+  return `${parsed.length}件`;
+}
+
+$('#fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    await xlsxSync.saveWorkbook(file);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  try {
+    const summary = await applyWorkbook(file);
+    alert(`${summary} を読み込みました`);
+  } catch (err) {
+    alert(`読み込みに失敗しました：${err.message}`);
+  }
+});
+
+// 他の画面で読み込み済みのExcelがあれば、起動時に自動で取り込む
+(async () => {
+  const file = await xlsxSync.loadWorkbook();
+  if (!file) return;
+  try { await applyWorkbook(file); } catch (err) { console.warn('[サジェスト]', err.message); }
+})();
+
+// 他の画面でExcelが読み込まれたら、この画面も自動的に反映する
+xlsxSync.onWorkbookChange(async () => {
+  const file = await xlsxSync.loadWorkbook();
+  if (!file) return;
+  try { await applyWorkbook(file); } catch (err) { console.warn('[サジェスト]', err.message); }
+});
+
+buildReasonToggles();
+renderReasons(null);
+renderItems(null);
+</script>
+</body>
+</html>

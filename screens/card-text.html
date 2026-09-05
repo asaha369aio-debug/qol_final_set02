@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>テキストカード問題</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  html, body { overflow-x: hidden; }
+  body { overflow-y: hidden; }
+  .stage { justify-content: flex-start; gap: 18px; min-height: 0; width: 100%; max-width: 100vw; }
+
+  .toolbar {
+    width: min(1200px, 100%);
+    max-width: 100%;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+  }
+  .toolbar select, .toolbar .file {
+    font: inherit; color: var(--fg); background: rgba(0,0,0,.3);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+  }
+  #answerBtn { padding: 5px 12px; font-size: 12px; line-height: 0.96; }
+  .toolbar .file { cursor: pointer; }
+  .toolbar .file input { display: none; }
+
+  /* 答え表示：ヘッダー（ツールバー）の右側に置く（幅が足りない時は折り返して自分の行に落ちる） */
+  .answer-box {
+    margin-left: auto;
+    max-width: 100%;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 16px;
+    background: linear-gradient(160deg, #26325e, #141b41);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  .answer-box .label { font-size: 11px; letter-spacing: .25em; color: var(--accent); flex: none; }
+  .answer-box .value {
+    font-size: clamp(16px, 2vw, 22px); font-weight: 900; min-height: 1.2em;
+    white-space: normal; overflow-wrap: anywhere;
+  }
+  /* 伏せている間は答えをDOMに入れない（文字数も分からないよう固定表示にする） */
+  .answer-box.hidden .value { color: var(--muted); letter-spacing: .3em; }
+
+  /* 文字カード群：スクロールなしで全カードが画面内に収まるよう、はみ出す時だけ縮小する */
+  .cards-viewport {
+    flex: 1; min-height: 0; width: 100%; max-width: 100%; box-sizing: border-box;
+    padding: 4px 5% 4px 10%;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .cards {
+    width: min(1400px, 100%); max-width: 100%;
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(8px, 2vw, 20px);
+    transform-origin: center;
+  }
+  /* 1行に収まらない場合はカードを折り返して表示する（マス目のサイズは維持する） */
+  .line { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; row-gap: 10px; }
+  .space { width: clamp(8px, 2vw, 20px); flex: none; }
+
+  /* 縦2：横1の比率。--card-max-w は1行最低15枚を保証するようJSが動的に設定する */
+  .char-scene { width: clamp(28px, min(8vw, var(--card-max-w, 110px)), 110px); aspect-ratio: 1 / 2; perspective: 800px; flex: none; }
+  .char {
+    position: relative; width: 100%; height: 100%; cursor: pointer;
+    transform-style: preserve-3d; transition: transform .5s cubic-bezier(.2,.8,.2,1);
+  }
+  .char.open { transform: rotateY(180deg); }
+  .char .face {
+    position: absolute; inset: 0; backface-visibility: hidden;
+    border-radius: 10px; border: 1px solid var(--line);
+    display: grid; place-items: center; box-shadow: 0 8px 20px rgba(0,0,0,.35);
+  }
+  /* 表（伏せている状態）＝文字の順番 */
+  .char .num {
+    background: linear-gradient(160deg, #2b3379, #171c4d);
+    color: var(--muted); font-size: clamp(16px, 3vw, 34px); font-weight: 800;
+  }
+  /* 裏（めくった状態）＝文字 */
+  .char .letter {
+    transform: rotateY(180deg);
+    background: linear-gradient(160deg, #fff8e2, #ffe08a);
+    color: #1a1030; font-size: clamp(22px, 4vw, 48px); font-weight: 900;
+  }
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="toolbar">
+    <label class="file">
+      📄 Excelを読み込む
+      <input type="file" id="fileInput" accept=".xlsx">
+    </label>
+    <select id="qSelect" title="問題を選択"></select>
+    <button class="btn ghost sm" id="prevBtn">← 前</button>
+    <button class="btn ghost sm" id="nextBtn">次 →</button>
+
+    <button class="btn sm" id="answerBtn">答えを見る</button>
+    <div class="answer-box hidden" id="answerBox">
+      <div class="label">ANSWER</div>
+      <div class="value" id="answerText"></div>
+    </div>
+  </div>
+
+  <div class="cards-viewport" id="cardsViewport">
+    <div class="cards" id="cards"></div>
+  </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script src="../js/xlsx-lite.js"></script>
+<script src="../js/xlsx-sync.js"></script>
+<script>
+const { $, mountTopbar, onKey, xlsxSync } = QOL;
+const { readSheet, rowsToCards } = QOL.xlsxLite;
+
+mountTopbar('textcard');
+
+// Excel未読み込み時のサンプル
+let cards = [
+  { no: '1', question: 'にほんで<br>いちばんたかいやまは', answer: '富士山' },
+  { no: '2', question: 'えどばくふを<br>ひらいたじんぶつは', answer: '徳川家康' },
+];
+let index = 0;
+
+const cardsEl = $('#cards');
+const cardsViewport = $('#cardsViewport');
+const qSelect = $('#qSelect');
+
+/**
+ * カードがスクロールなしで画面内に収まるよう、縦・横どちらかがはみ出す時は
+ * 全体を縮小する。
+ * .line は overflow:visible のため scrollWidth/scrollHeight では実際の
+ * はみ出し量を検出できないので getBoundingClientRect で測る。
+ */
+function fitCards() {
+  cardsEl.style.transform = '';
+  const rows = [...cardsEl.querySelectorAll('.line')];
+  if (!rows.length) return;
+  let minLeft = Infinity, maxRight = -Infinity, minTop = Infinity, maxBottom = -Infinity;
+  rows.forEach((row) => {
+    const r = row.getBoundingClientRect();
+    minLeft = Math.min(minLeft, r.left);
+    maxRight = Math.max(maxRight, r.right);
+    minTop = Math.min(minTop, r.top);
+    maxBottom = Math.max(maxBottom, r.bottom);
+  });
+  const naturalW = maxRight - minLeft;
+  const naturalH = maxBottom - minTop;
+  const cvStyle = getComputedStyle(cardsViewport);
+  const padL = parseFloat(cvStyle.paddingLeft) || 0;
+  const padR = parseFloat(cvStyle.paddingRight) || 0;
+  const availW = cardsViewport.clientWidth - padL - padR;
+  const availH = cardsViewport.clientHeight;
+  const scale = Math.min(1, availW / naturalW, availH / naturalH);
+  cardsEl.style.transform = scale < 1 ? `scale(${scale})` : '';
+}
+
+/** 問題文を「行 → 文字」に分解する。<br> が改行、空白と <> はカードを置かず隙間になる */
+function toLines(question) {
+  let order = 0;
+  return question
+    .split(/<br\s*\/?>|\r\n|\n/i)
+    .map((line) =>
+      line.split('<>').flatMap((seg, i) => {
+        const chars = [...seg].map((ch) => (/\s|　/.test(ch) ? { space: true } : { ch, no: ++order }));
+        return i === 0 ? chars : [{ space: true }, ...chars];
+      })
+    );
+}
+
+function renderSelect() {
+  qSelect.innerHTML = '';
+  cards.forEach((c, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `第 ${c.no} 問`;
+    qSelect.appendChild(opt);
+  });
+  qSelect.value = index;
+}
+
+function hideAnswer() {
+  $('#answerBox').classList.add('hidden');
+  $('#answerText').textContent = '？ ？ ？';
+  $('#answerBtn').textContent = '答えを見る';
+}
+
+function showAnswer() {
+  $('#answerBox').classList.remove('hidden');
+  $('#answerText').textContent = cards[index].answer;
+  $('#answerBtn').textContent = '答えを隠す';
+  openAll();
+}
+
+/** items（1問題行分の文字・空白）から .line 要素を1つ作る */
+function buildRow(items) {
+  const row = document.createElement('div');
+  row.className = 'line';
+  items.forEach((item) => {
+    if (item.space) {
+      const sp = document.createElement('span');
+      sp.className = 'space';
+      row.appendChild(sp);
+      return;
+    }
+    const scene = document.createElement('div');
+    scene.className = 'char-scene';
+    const inner = document.createElement('div');
+    inner.className = 'char';
+    inner.dataset.no = item.no;
+
+    const num = document.createElement('div');
+    num.className = 'face num';
+    num.textContent = item.no;
+
+    const letter = document.createElement('div');
+    letter.className = 'face letter';
+    letter.textContent = item.ch;
+
+    inner.append(num, letter);
+    inner.addEventListener('click', () => inner.classList.toggle('open'));
+    scene.appendChild(inner);
+    row.appendChild(scene);
+  });
+  return row;
+}
+
+const MIN_PER_ROW = 15;
+const LINE_GAP = 8; // .line の gap と一致させる
+
+/** 1行あたり最低MIN_PER_ROW枚は並ぶよう、カード幅の上限をCSS変数に反映する */
+function updateCardMaxWidth(lines) {
+  const longest = Math.max(0, ...lines.map((line) => line.length));
+  if (longest === 0) return;
+  const target = Math.min(longest, MIN_PER_ROW);
+  const cvStyle = getComputedStyle(cardsViewport);
+  const padL = parseFloat(cvStyle.paddingLeft) || 0;
+  const padR = parseFloat(cvStyle.paddingRight) || 0;
+  const availW = cardsViewport.clientWidth - padL - padR;
+  const maxW = (availW - (target - 1) * LINE_GAP) / target;
+  document.documentElement.style.setProperty('--card-max-w', `${maxW}px`);
+}
+
+function render() {
+  const card = cards[index];
+  hideAnswer();
+  qSelect.value = index;
+
+  const lines = toLines(card.question);
+  updateCardMaxWidth(lines);
+
+  cardsEl.innerHTML = '';
+  lines.forEach((line) => cardsEl.appendChild(buildRow(line)));
+  fitCards();
+}
+
+/** 伏せたままのカードのうち、番号が最小のものを1枚めくる */
+function openOne() {
+  const next = [...cardsEl.querySelectorAll('.char:not(.open)')]
+    .sort((a, b) => a.dataset.no - b.dataset.no)[0];
+  next?.classList.add('open');
+}
+
+/** 伏せてあるカードをすべてめくる */
+function openAll() {
+  cardsEl.querySelectorAll('.char:not(.open)').forEach((el) => el.classList.add('open'));
+}
+
+const move = (d) => {
+  index = (index + d + cards.length) % cards.length;
+  render();
+};
+
+$('#answerBtn').addEventListener('click', () =>
+  ($('#answerBox').classList.contains('hidden') ? showAnswer() : hideAnswer()));
+$('#prevBtn').addEventListener('click', () => move(-1));
+$('#nextBtn').addEventListener('click', () => move(1));
+qSelect.addEventListener('change', () => { index = Number(qSelect.value); render(); });
+
+// ---- Excel読み込み（「テキスト」シートを使う。全画面で1つのExcelを共有する） ----
+async function applyWorkbook(file) {
+  const loaded = rowsToCards(await readSheet(file, /テキスト/));
+  if (!loaded.length) throw new Error('B列に問題が見つかりませんでした');
+  cards = loaded;
+  index = 0;
+  renderSelect();
+  render();
+}
+
+$('#fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    await xlsxSync.saveWorkbook(file);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  try {
+    await applyWorkbook(file);
+    alert(`問題${cards.length}件を読み込みました`);
+  } catch (err) {
+    alert(`読み込みに失敗しました：${err.message}`);
+  }
+});
+
+// 他の画面で読み込み済みのExcelがあれば、起動時に自動で取り込む
+(async () => {
+  const file = await xlsxSync.loadWorkbook();
+  if (!file) return;
+  try { await applyWorkbook(file); } catch (err) { console.warn('[テキストカード]', err.message); }
+})();
+
+// 他の画面でExcelが読み込まれたら、この画面も自動的に反映する
+xlsxSync.onWorkbookChange(async () => {
+  const file = await xlsxSync.loadWorkbook();
+  if (!file) return;
+  try { await applyWorkbook(file); } catch (err) { console.warn('[テキストカード]', err.message); }
+});
+
+onKey({ ' ': openOne, ArrowLeft: () => move(-1), ArrowRight: () => move(1) });
+window.addEventListener('resize', () => { updateCardMaxWidth(toLines(cards[index].question)); fitCards(); });
+
+renderSelect();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+/* 共通テーマ：クイズ番組風ダークUI */
+:root {
+  --bg: #0d1030;
+  --bg2: #171b4d;
+  --panel: rgba(255, 255, 255, 0.06);
+  --line: rgba(255, 255, 255, 0.16);
+  --fg: #f3f5ff;
+  --muted: #a3a9d6;
+  --accent: #ffd54a;
+  --accent2: #ff5c8a;
+  --ok: #3ddc97;
+  --ng: #ff6b6b;
+  --radius: 18px;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  color: var(--fg);
+  background: linear-gradient(160deg, #9db3cf, #5c7599);
+  background-attachment: fixed;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* ---- ウィンドウ風ヘッダー（左上3色ドット＋中央タイトル。suggest画面のデザインを全画面共通化） ---- */
+.window-header {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 24px;
+  padding: 16px 24px 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+}
+.window-header .dots { display: flex; gap: 8px; }
+.window-header .dot { width: 20px; height: 20px; border-radius: 5px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
+.window-header .dot.red { background: #d9382f; }
+.window-header .dot.yellow { background: #ffd54a; }
+.window-header .dot.blue { background: #3d6bd9; }
+.window-header .title {
+  flex: 1; text-align: center; margin: 0 44px 0 0;
+  font-size: clamp(16px, 2.08vw, 22.4px); font-weight: 900; color: #14182f;
+}
+
+/* ---- レイアウト ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.topbar h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: 0.08em;
+}
+
+.topbar .spacer { flex: 1; }
+
+.stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 24px 48px;
+  text-align: center;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+/* ---- パーツ ---- */
+.btn {
+  font: inherit;
+  font-weight: 700;
+  color: #1a1030;
+  background: linear-gradient(180deg, #ffe589, var(--accent));
+  border: none;
+  border-radius: 999px;
+  padding: 12px 28px;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #b98f00, 0 12px 24px rgba(0, 0, 0, 0.35);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+.btn:hover { filter: brightness(1.05); }
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b98f00; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn.ghost {
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.btn.ghost:active { transform: none; }
+
+.btn.sm { padding: 8px 18px; font-size: 14px; }
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 4px 14px;
+}
+
+.muted { color: var(--muted); }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 800;
+  min-width: 90px;
+  padding: 6px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+}
+.timer.danger { color: var(--ng); border-color: var(--ng); }
+
+@media (max-width: 640px) {
+  .topbar { padding: 12px 16px; }
+  .topbar h1 { font-size: 16px; }
+  .stage { padding: 20px 14px 36px; }
+}

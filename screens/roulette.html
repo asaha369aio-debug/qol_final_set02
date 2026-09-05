@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ルーレット画面</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  /* ---- デザイン比較用の変数（既定値＝現行デザイン） ---- */
+  :root {
+    --block-a: #2a2a2a;
+    --block-b: #0a0a0a;
+    --block-border: rgba(255, 255, 255, 0.25);
+    --settings-a: #232a70;
+    --settings-b: #141845;
+    --ring-core: #10143a;
+  }
+
+  body { overflow: hidden; }
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(220px, 340px) 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .block {
+    background: linear-gradient(160deg, var(--block-a), var(--block-b));
+    border: 1px solid var(--block-border);
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .block.click { cursor: pointer; user-select: none; transition: filter .12s ease, transform .08s ease; }
+  .block.click:hover { filter: brightness(1.1); }
+  .block.click:active { transform: translateY(2px); }
+  .block.click:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+
+  /* ---- 左：タイマー & 設定/読み込み ---- */
+  .left-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+  .board-image {
+    width: 100%; max-height: 100px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
+  /* リング型：残り時間を円弧の減り具合で表現する */
+  .timer-block { display: flex; flex-direction: column; align-items: center; gap: 14px; flex: 0 0 auto; padding: 14px 0 2px; }
+
+  .timer-ring {
+    --pct: 100%;
+    --ring-color: var(--accent);
+    width: min(92%, 240px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background:
+      radial-gradient(closest-side, var(--ring-core) 76%, transparent 77% 100%),
+      conic-gradient(var(--ring-color) 0% var(--pct), rgba(255, 255, 255, 0.14) var(--pct) 100%);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.3s ease;
+  }
+  .timer-ring-inner {
+    font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif;
+    font-variation-settings: "wght" 700, "wdth" 68;
+    font-size: clamp(54px, 9.5vw, 82px); font-weight: 700; letter-spacing: -0.09em;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+  }
+  .timer-ring.warn { --ring-color: #ffd54a; }
+  .timer-ring.warn .timer-ring-inner { color: #ffd54a; }
+  .timer-ring.danger { --ring-color: #ff6b6b; }
+  .timer-ring.danger .timer-ring-inner { color: #ff6b6b; }
+
+  .timer-btns { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1.2fr; gap: 6px; width: 100%; height: 44px; }
+  .timer-btns .block { font-weight: 800; font-size: 20px; border-radius: 8px; }
+
+  .left-spacer { flex: 1; }
+
+  .left-bottom { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 78px; }
+  .left-bottom .block { font-weight: 800; font-size: 21px; line-height: 1.35; }
+  .left-bottom label input { display: none; }
+
+  /* ---- 右：結果 / プレイヤー / ジャンル / 開始終了 ---- */
+  /* 画像の比率に合わせ、ジャンル欄にも上段(進むマス+プレイヤー)の半分ほどの面積を確保する */
+  .right-col { display: grid; grid-template-rows: 2fr 1fr auto; gap: 10px; min-height: 0; }
+
+  .top-row { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; min-height: 0; }
+
+  .result-box {
+    font-size: clamp(40px, 6.5vw, 74px); font-weight: 900;
+    flex-direction: column; gap: 14px;
+  }
+  .result-box .placeholder { line-height: 1.3; }
+
+  /* ---- 進むマス：1〜4の目を持つ3Dキューブ ---- */
+  .dice-scene {
+    width: 110px; height: 110px;
+    perspective: 700px;
+  }
+  .dice-cube {
+    position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 1.1s cubic-bezier(.15, .8, .25, 1);
+  }
+  .dice-face {
+    position: absolute; inset: 0;
+    background: #fff; border-radius: 14px;
+    box-shadow: inset 0 0 0 3px rgba(0,0,0,.12), 0 6px 14px rgba(0,0,0,.35);
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    padding: 14%;
+    transform: rotateY(var(--deg)) translateZ(55px);
+  }
+  .dice-face .pip {
+    width: 100%; aspect-ratio: 1; border-radius: 50%;
+    background: #1a1030; align-self: center; justify-self: center;
+    opacity: 0;
+  }
+  /* 3x3の升目のうち、どこに点を置くかを面ごとに指定 */
+  .dice-face[data-n="1"] .p5 { opacity: 1; }
+  .dice-face[data-n="2"] .p1, .dice-face[data-n="2"] .p9 { opacity: 1; }
+  .dice-face[data-n="3"] .p1, .dice-face[data-n="3"] .p5, .dice-face[data-n="3"] .p9 { opacity: 1; }
+  .dice-face[data-n="4"] .p1, .dice-face[data-n="4"] .p3, .dice-face[data-n="4"] .p7, .dice-face[data-n="4"] .p9 { opacity: 1; }
+
+  .result-label { font-size: clamp(22px, 2.8vw, 30px); font-weight: 800; opacity: .95; }
+
+  .players-col { display: flex; flex-direction: column; min-height: 0; }
+  .player-row { flex: 1; font-weight: 800; flex-direction: column; gap: 4px; overflow: hidden; padding: 6px 10px; transition: opacity .15s ease, filter .15s ease; }
+  .player-row.dim { opacity: .35; filter: grayscale(1); }
+  .player-row .mode {
+    font-weight: 900; font-size: 46px; /* JSで枠に収まるよう自動調整される初期値 */
+    white-space: nowrap; max-width: 100%;
+  }
+  .vs { text-align: center; font-weight: 800; color: var(--muted); font-size: 18px; padding: 4px 0; }
+
+  .player-select {
+    font: inherit; font-weight: 900; font-size: 42px; /* JSで自動調整される初期値 */
+    text-align: center;
+    color: #fff; background: transparent;
+    border: none; border-radius: 6px; padding: 4px 10px;
+    max-width: 100%;
+  }
+  .player-select option { color: #1a1030; }
+
+  .genre-box { font-size: clamp(26px, 4vw, 42px); font-weight: 800; flex-direction: column; gap: 6px; }
+  .genre-box .name { font-size: clamp(34px, 5.6vw, 56px); font-weight: 900; }
+
+  .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 76px; }
+  .action-row .block { font-weight: 800; font-size: 24px; }
+
+  /* ---- 設定パネル ---- */
+  .settings-panel {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(10, 12, 30, 0.6);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settings-panel[hidden] { display: none; }
+  .settings-box {
+    width: min(420px, 90vw);
+    display: grid; gap: 14px; padding: 24px;
+    background: linear-gradient(160deg, var(--settings-a), var(--settings-b));
+    border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+  }
+  .settings-box { max-height: 84vh; overflow-y: auto; }
+  .settings-box h2 { margin: 0; font-size: 21px; }
+  .settings-box h3 {
+    margin: 4px 0 -4px; font-size: 16px; letter-spacing: .08em;
+    color: var(--accent); border-top: 1px solid var(--line); padding-top: 14px;
+  }
+  .settings-box label { display: grid; gap: 6px; font-size: 16px; color: var(--muted); }
+  .settings-box input, .settings-box textarea {
+    font: inherit; color: var(--fg); background: rgba(0,0,0,.3);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    resize: vertical;
+  }
+  .settings-box .row { display: flex; gap: 10px; justify-content: flex-end; }
+  .settings-box .hint { font-size: 14px; opacity: .8; }
+
+  .weight-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .weight-grid label { display: grid; justify-items: center; gap: 4px; font-size: 14px; }
+  .weight-grid input { width: 100%; text-align: center; padding: 6px; }
+
+  .weight-list { display: grid; gap: 6px; max-height: 160px; overflow-y: auto; }
+  .weight-list .weight-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .weight-list .weight-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .weight-list .weight-row input { width: 64px; text-align: center; padding: 4px 6px; flex: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="left-col">
+    <img class="board-image" src="../assets/qol_logo.png" alt="QOLロゴ">
+    <div class="timer-block">
+      <div class="timer-ring" id="timerRing">
+        <div class="timer-ring-inner" id="timerDisplay">60:00</div>
+      </div>
+      <div class="timer-btns">
+        <button class="block click" id="minusBtn">-1</button>
+        <button class="block click" id="plusBtn">+1</button>
+        <button class="block click" id="startTimerBtn">START</button>
+        <button class="block click" id="stopTimerBtn">STOP</button>
+      </div>
+    </div>
+    <div class="left-spacer"></div>
+    <div class="left-bottom">
+      <button class="block click" id="settingsBtn">設定</button>
+      <label class="block click" for="fileInput" title="「メンバールーレット」シートを読み込みます（A列:メンバー／B列:出現確率／C列:ジャンル／D列:出現確率。全画面共通の1つのExcelを使えます）">読み込み<br>ファイル<input type="file" id="fileInput" accept=".xlsx"></label>
+    </div>
+  </div>
+
+  <div class="right-col">
+    <div class="top-row">
+      <div class="block result-box" id="resultBox">
+        <span class="placeholder" id="resultPlaceholder">進むマス</span>
+        <div class="dice-scene" id="diceScene" hidden>
+          <div class="dice-cube" id="diceCube">
+            <div class="dice-face" data-n="1" style="--deg: 0deg">
+              <span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span>
+              <span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span>
+              <span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span>
+            </div>
+            <div class="dice-face" data-n="2" style="--deg: 90deg">
+              <span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span>
+              <span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span>
+              <span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span>
+            </div>
+            <div class="dice-face" data-n="3" style="--deg: 180deg">
+              <span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span>
+              <span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span>
+              <span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span>
+            </div>
+            <div class="dice-face" data-n="4" style="--deg: 270deg">
+              <span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span>
+              <span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span>
+              <span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span>
+            </div>
+          </div>
+        </div>
+        <span class="result-label" id="resultLabel" hidden></span>
+      </div>
+      <div class="players-col">
+        <div class="block player-row" id="player1Box">
+          <select class="player-select" id="player1Select"></select>
+        </div>
+        <div class="vs">vs</div>
+        <div class="block player-row" id="player2Box">
+          <span class="mode" id="player2Name">ルーレット</span>
+        </div>
+        <div class="vs">vs</div>
+        <div class="block player-row" id="player3Box">
+          <span class="mode" id="player3Name">ルーレット</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="block genre-box" id="genreBox">ジャンル</div>
+
+    <div class="action-row">
+      <button class="block click" id="rlStart">ルーレット開始</button>
+      <button class="block click" id="rlStop" disabled>ルーレット終了</button>
+    </div>
+  </div>
+</main>
+
+<div class="settings-panel" id="settingsPanel" hidden>
+  <div class="settings-box">
+    <h2>設定</h2>
+
+    <h3>進むマス</h3>
+    <label>
+      範囲（最小〜最大）
+      <span style="display:flex; gap:8px; align-items:center;">
+        <input type="number" id="minRange" min="1" max="99" value="1" style="width:70px">
+        〜
+        <input type="number" id="maxRange" min="1" max="99" value="4" style="width:70px">
+      </span>
+      <span class="hint">※ 1〜4の4通りのときだけ3Dダイスで演出されます。それ以外は数字表示になります。</span>
+    </label>
+    <label>
+      入れ替わり速度（ms・小さいほど速い）
+      <input type="number" id="diceSpeed" min="20" max="500" value="60">
+    </label>
+    <label>
+      出る確率（1〜4、比率でOK・すべて同じなら均等）
+      <div class="weight-grid" id="diceWeights">
+        <label>1<input type="number" min="0" step="0.1" value="1" data-face="1"></label>
+        <label>2<input type="number" min="0" step="0.1" value="1" data-face="2"></label>
+        <label>3<input type="number" min="0" step="0.1" value="1" data-face="3"></label>
+        <label>4<input type="number" min="0" step="0.1" value="1" data-face="4"></label>
+      </div>
+    </label>
+
+    <h3>プレイヤー</h3>
+    <label>
+      プレイヤー2 入れ替わり速度（ms）
+      <input type="number" id="playerSpeed2" min="20" max="500" value="80">
+    </label>
+    <label>
+      プレイヤー3 入れ替わり速度（ms）
+      <input type="number" id="playerSpeed3" min="20" max="500" value="80">
+    </label>
+    <label>
+      出る確率（名簿ごと）
+      <div class="weight-list" id="playerWeightsBox"></div>
+    </label>
+
+    <h3>ジャンル</h3>
+    <label>
+      入れ替わり速度（ms）
+      <input type="number" id="genreSpeed" min="20" max="500" value="80">
+    </label>
+    <label>
+      出る確率（ジャンルごと）
+      <div class="weight-list" id="genreWeightsBox"></div>
+    </label>
+
+    <h3>読み込みデータ</h3>
+    <label>
+      <span class="hint">読み込んだExcelファイルを解除し、プレイヤー・ジャンルを初期状態に戻します（全画面で共有しているデータも消えます）。</span>
+      <button class="btn ghost sm" id="clearWorkbookBtn" type="button">読み込みデータをクリア</button>
+    </label>
+
+    <h3>初期化</h3>
+    <label>
+      <span class="hint">読み込みファイル・制限時間・進むマス/プレイヤー/ジャンルの設定など、この画面のすべてを初期値に戻します。</span>
+      <button class="btn ghost sm" id="resetAllBtn" type="button">すべて初期値に戻す</button>
+    </label>
+
+    <div class="row">
+      <button class="btn ghost sm" id="settingsCancel">閉じる</button>
+      <button class="btn sm" id="settingsApply">適用</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/common.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/xlsx-lite.js"></script>
+<script src="../js/xlsx-sync.js"></script>
+<script>
+const { $, $$, mountTopbar, onKey, clamp, randInt, pick, xlsxSync } = QOL;
+const { rouletteItems } = QOL.data;
+const { readSheet } = QOL.xlsxLite;
+
+mountTopbar('roulette');
+
+// ---- タイマー（-1/+1は1分単位） ----
+// 画面はiframeの切り替えで毎回作り直されるため、終了時刻をlocalStorageに保存し、
+// 他画面から戻ってきたときに現在時刻から残り秒数を計算し直して復元する。
+const TIMER_KEY = 'qol_roulette_timer';
+let remain = 120 * 60;
+// リングの満タン(100%)基準。60分固定だと、それより長いスタート時間を設定した際に
+// リングの目盛りと実際の残り時間がズレるため、「スタート時点の残り時間」を都度、満タン基準にする。
+let ringMax = remain;
+let timerId = null;
+const timerDisplay = $('#timerDisplay');
+const timerRing = $('#timerRing');
+
+function saveTimerState() {
+  const state = timerId
+    ? { running: true, endAt: Date.now() + remain * 1000, ringMax }
+    : { running: false, remain, ringMax };
+  localStorage.setItem(TIMER_KEY, JSON.stringify(state));
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+function renderTimer() {
+  timerDisplay.textContent = formatTime(remain);
+  timerRing.style.setProperty('--pct', `${clamp(remain / ringMax, 0, 1) * 100}%`);
+  timerRing.classList.toggle('warn', remain <= 30 && remain > 10);
+  timerRing.classList.toggle('danger', remain <= 10);
+}
+function startTimer() {
+  if (timerId) return;
+  // その時点の残り時間を「スタート時間」として、リングの満タン基準に採用する
+  ringMax = Math.max(remain, 1);
+  timerId = setInterval(() => {
+    remain = Math.max(0, remain - 1);
+    renderTimer();
+    if (remain === 0) stopTimer();
+  }, 1000);
+  renderTimer();
+  saveTimerState();
+}
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+  saveTimerState();
+}
+
+// 他画面から戻ってきたときのために、保存済みの状態を復元する
+(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TIMER_KEY) || 'null');
+    if (!saved) return;
+    if (typeof saved.ringMax === 'number' && saved.ringMax > 0) ringMax = saved.ringMax;
+    if (saved.running && typeof saved.endAt === 'number') {
+      remain = Math.max(0, Math.round((saved.endAt - Date.now()) / 1000));
+      ringMax = Math.max(ringMax, remain);
+      if (remain > 0) startTimer();
+      else saveTimerState();
+    } else if (typeof saved.remain === 'number') {
+      remain = clamp(saved.remain, 0, 5999 * 60);
+      ringMax = Math.max(ringMax, remain);
+    }
+  } catch { /* 保存データが壊れていれば初期値のまま */ }
+})();
+
+$('#minusBtn').addEventListener('click', () => {
+  remain = clamp(remain - 60, 0, 5999 * 60);
+  if (!timerId) ringMax = Math.max(remain, 1);
+  renderTimer();
+  saveTimerState();
+});
+$('#plusBtn').addEventListener('click', () => {
+  remain = clamp(remain + 60, 0, 5999 * 60);
+  if (!timerId) ringMax = Math.max(remain, 1);
+  renderTimer();
+  saveTimerState();
+});
+$('#startTimerBtn').addEventListener('click', startTimer);
+$('#stopTimerBtn').addEventListener('click', stopTimer);
+
+// ---- 重み付きランダム抽選（出る確率の反映） ----
+function weightedPick(items, weightOf) {
+  const weights = items.map((it) => Math.max(0, Number(weightOf(it)) || 0));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return pick(items);
+  let r = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return items[i];
+  }
+  return items[items.length - 1];
+}
+
+// 「それ以外」は各プレイヤーで重複してもよい特別な名前なので、除外対象からは常に外す
+const OTHERS_NAME = 'それ以外';
+
+// 重複防止：除外したい名前を除いた候補から抽選する（除外しきると空になる場合は元の候補全体にフォールバック）
+function pickExcluding(items, weightOf, excludeNames) {
+  const effectiveExcludes = excludeNames.filter((n) => n !== OTHERS_NAME);
+  const filtered = items.filter((it) => !effectiveExcludes.includes(it));
+  return weightedPick(filtered.length ? filtered : items, weightOf);
+}
+
+// ---- テキストが枠からはみ出さないよう、必要なら自動で縮小する ----
+function fitText(el, max, min = 13) {
+  el.style.fontSize = `${max}px`;
+  let size = max;
+  while (el.scrollWidth > el.clientWidth && size > min) {
+    size -= 1;
+    el.style.fontSize = `${size}px`;
+  }
+}
+
+const measureCanvas = document.createElement('canvas');
+const measureCtx = measureCanvas.getContext('2d');
+function fitSelectFont(selectEl, texts, max = 42, min = 14) {
+  const avail = selectEl.clientWidth - 20;
+  if (avail <= 0 || !texts.length) return;
+  const family = getComputedStyle(selectEl).fontFamily;
+  const longest = texts.reduce((a, b) => (b.length > a.length ? b : a), '');
+  let size = max;
+  while (size > min) {
+    measureCtx.font = `900 ${size}px ${family}`;
+    if (measureCtx.measureText(longest).width <= avail) break;
+    size -= 1;
+  }
+  selectEl.style.fontSize = `${size}px`;
+}
+
+// ---- 進むマス範囲・ジャンル一覧・速度/確率設定 ----
+// 1〜4の範囲は、キューブの4面を使った3Dダイスアニメーションで演出する
+let rangeMin = 1, rangeMax = 4;
+let genres = rouletteItems.map((it) => it.label);
+let genreWeights = {}; // ジャンル名 -> 重み（未指定は1）
+let diceSpeed = 60;     // ms相当（小さいほど速い）
+let diceWeights = [1, 1, 1, 1]; // 1〜4の出目の重み
+let playerSpeed2 = 80;  // ms（プレイヤー2）
+let playerSpeed3 = 80;  // ms（プレイヤー3）
+let genreSpeed = 80;    // ms
+let playerWeights = {}; // プレイヤー名 -> 重み（未指定は1）
+
+// ---- プレイヤー ----
+// プレイヤー1：ドロップダウンで手動選択。プレイヤー2・3：ルーレット開始で
+// 名簿からランダムに高速切り替わり、ルーレット終了で確定する。
+let playerNames = ['プレイヤー1', 'プレイヤー2', 'プレイヤー3']; // 選択候補の名簿
+const player1Select = $('#player1Select');
+const player2NameEl = $('#player2Name');
+const player3NameEl = $('#player3Name');
+const player1Box = $('#player1Box');
+const player2Box = $('#player2Box');
+const player3Box = $('#player3Box');
+
+function renderPlayerRoster() {
+  const prev = player1Select.value;
+  player1Select.innerHTML = '';
+  playerNames.forEach((name, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = name;
+    player1Select.appendChild(opt);
+  });
+  // 名簿の範囲内なら、それまでの選択位置を維持する
+  const prevIndex = Number(prev);
+  player1Select.value = prevIndex >= 0 && prevIndex < playerNames.length ? prev : '0';
+  fitSelectFont(player1Select, playerNames);
+
+  player2NameEl.textContent = 'ルーレット';
+  player3NameEl.textContent = 'ルーレット';
+  fitText(player2NameEl, 46);
+  fitText(player3NameEl, 46);
+  updatePlayer1Options();
+  updateZenInDim();
+
+  // 名簿にない名前の重み設定は捨て、既存の重みは維持する
+  const kept = {};
+  playerNames.forEach((n) => { kept[n] = playerWeights[n] ?? 1; });
+  playerWeights = kept;
+}
+
+// プレイヤー2・3に確定した名前を、プレイヤー1のドロップダウンでは選択できないようグレーアウトする
+// （「それ以外」は重複OKな特別枠なのでグレーアウトしない）
+function updatePlayer1Options() {
+  const used = new Set();
+  if (player2NameEl.textContent && player2NameEl.textContent !== 'ルーレット' && player2NameEl.textContent !== OTHERS_NAME) {
+    used.add(player2NameEl.textContent);
+  }
+  if (player3NameEl.textContent && player3NameEl.textContent !== 'ルーレット' && player3NameEl.textContent !== OTHERS_NAME) {
+    used.add(player3NameEl.textContent);
+  }
+  [...player1Select.options].forEach((opt) => {
+    opt.disabled = used.has(opt.textContent);
+  });
+}
+
+// プレイヤー1〜3のいずれかが「全員」になったら、それ以外のプレイヤー枠をグレーアウトする
+function updateZenInDim() {
+  const ZENIN = '全員';
+  const p1 = playerNames[Number(player1Select.value)];
+  const p2 = player2NameEl.textContent;
+  const p3 = player3NameEl.textContent;
+  const anyZenin = p1 === ZENIN || p2 === ZENIN || p3 === ZENIN;
+  player1Box.classList.toggle('dim', anyZenin && p1 !== ZENIN);
+  player2Box.classList.toggle('dim', anyZenin && p2 !== ZENIN);
+  player3Box.classList.toggle('dim', anyZenin && p3 !== ZENIN);
+}
+player1Select.addEventListener('change', updateZenInDim);
+renderPlayerRoster();
+
+// ---- プレイヤーの「出る確率」編集UI（名簿ごとに数値入力を並べる） ----
+function renderPlayerWeightsUI() {
+  const box = $('#playerWeightsBox');
+  box.innerHTML = '';
+  playerNames.forEach((name) => {
+    const row = document.createElement('div');
+    row.className = 'weight-row';
+
+    const label = document.createElement('span');
+    label.textContent = name;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '0.1';
+    input.value = String(playerWeights[name] ?? 1);
+    input.dataset.name = name;
+
+    row.append(label, input);
+    box.appendChild(row);
+  });
+}
+
+// ---- ジャンルの「出る確率」編集UI（一覧ごとに数値入力を並べる） ----
+function renderGenreWeightsUI() {
+  const box = $('#genreWeightsBox');
+  box.innerHTML = '';
+  genres.forEach((name) => {
+    const row = document.createElement('div');
+    row.className = 'weight-row';
+
+    const label = document.createElement('span');
+    label.textContent = name;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '0.1';
+    input.value = String(genreWeights[name] ?? 1);
+    input.dataset.name = name;
+
+    row.append(label, input);
+    box.appendChild(row);
+  });
+}
+
+// ---- ルーレット本体（進むマス数 & ジャンル） ----
+const genreBox = $('#genreBox');
+const resultPlaceholder = $('#resultPlaceholder');
+const diceScene = $('#diceScene');
+const diceCube = $('#diceCube');
+const resultLabel = $('#resultLabel');
+
+let genreSpinId = null;
+let diceRAF = null;
+let spinTextId = null;
+let playerSpin2Id = null;
+let playerSpin3Id = null;
+let cubeAngle = 0;
+
+// キューブの4面が使えるのは、出目がちょうど1〜4の4通りのときだけ。
+// それ以外の範囲設定では、従来どおりテキストで数字を切り替える。
+const useDice = () => rangeMax - rangeMin + 1 === 4;
+
+// 1〜4を重み付きで抽選する（進むマスの「出る確率」設定を反映）
+function pickDiceFace() {
+  return weightedPick([1, 2, 3, 4], (n) => diceWeights[n - 1]);
+}
+
+function spinDiceFrame() {
+  // diceSpeed(ms)が小さいほど1フレームあたりの回転量を大きくして速く見せる
+  cubeAngle += 840 / diceSpeed;
+  diceCube.style.transform = `rotateY(${cubeAngle}deg)`;
+  diceRAF = requestAnimationFrame(spinDiceFrame);
+}
+
+function startRoulette() {
+  if (genreSpinId || diceRAF) return;
+  $('#rlStart').disabled = true;
+  $('#rlStop').disabled = false;
+
+  genreSpinId = setInterval(() => {
+    genreBox.textContent = weightedPick(genres, (g) => genreWeights[g] ?? 1) ?? 'ジャンル';
+  }, genreSpeed);
+
+  // プレイヤー2・3は名簿から重み付きランダムで高速切り替え（プレイヤー1はドロップダウンで固定）。
+  // 全員が重複しないよう、プレイヤー1の名前とお互いの名前を除いた候補から抽選する。
+  // プレイヤー2・3は個別の速度で独立して切り替わる。
+  if (playerNames.length) {
+    playerSpin2Id = setInterval(() => {
+      const p1Name = playerNames[Number(player1Select.value)];
+      player2NameEl.textContent = pickExcluding(playerNames, (n) => playerWeights[n] ?? 1, [p1Name]);
+      fitText(player2NameEl, 46);
+    }, playerSpeed2);
+    playerSpin3Id = setInterval(() => {
+      const p1Name = playerNames[Number(player1Select.value)];
+      player3NameEl.textContent = pickExcluding(playerNames, (n) => playerWeights[n] ?? 1, [p1Name, player2NameEl.textContent]);
+      fitText(player3NameEl, 46);
+    }, playerSpeed3);
+  }
+
+  if (useDice()) {
+    resultPlaceholder.hidden = true;
+    resultLabel.hidden = true;
+    diceScene.hidden = false;
+    diceCube.style.transition = 'none';
+    spinDiceFrame();
+  } else {
+    resultPlaceholder.hidden = false;
+    diceScene.hidden = true;
+    resultLabel.hidden = false;
+    spinTextId = setInterval(() => {
+      resultPlaceholder.textContent = String(rangeMin + randInt(rangeMax - rangeMin + 1));
+    }, diceSpeed);
+  }
+}
+
+function stopRoulette() {
+  if (!genreSpinId && !diceRAF && !spinTextId) return;
+  clearInterval(genreSpinId);
+  genreSpinId = null;
+  $('#rlStart').disabled = false;
+  $('#rlStop').disabled = true;
+
+  if (diceRAF) {
+    cancelAnimationFrame(diceRAF);
+    diceRAF = null;
+    const final = pickDiceFace(); // 1〜4（出る確率を反映）
+    // 現在の回転角から、final面が正面(0deg)に来る角度まで、余分に2回転してから止める
+    const desiredMod = ((360 - (final - 1) * 90) % 360 + 360) % 360;
+    const currentMod = ((cubeAngle % 360) + 360) % 360;
+    const diff = (desiredMod - currentMod + 360) % 360;
+    cubeAngle += diff + 720;
+    diceCube.style.transition = 'transform 1.1s cubic-bezier(.15,.8,.25,1)';
+    diceCube.style.transform = `rotateY(${cubeAngle}deg)`;
+    resultLabel.hidden = false;
+    resultLabel.textContent = `${final}マス`;
+  }
+  if (spinTextId) {
+    clearInterval(spinTextId);
+    spinTextId = null;
+  }
+
+  if (playerSpin2Id || playerSpin3Id) {
+    clearInterval(playerSpin2Id);
+    clearInterval(playerSpin3Id);
+    playerSpin2Id = null;
+    playerSpin3Id = null;
+    if (playerNames.length) {
+      const p1Name = playerNames[Number(player1Select.value)];
+      const p2Final = pickExcluding(playerNames, (n) => playerWeights[n] ?? 1, [p1Name]);
+      const p3Final = pickExcluding(playerNames, (n) => playerWeights[n] ?? 1, [p1Name, p2Final]);
+      player2NameEl.textContent = p2Final;
+      player3NameEl.textContent = p3Final;
+      fitText(player2NameEl, 46);
+      fitText(player3NameEl, 46);
+      updatePlayer1Options();
+      updateZenInDim();
+    }
+  }
+}
+$('#rlStart').addEventListener('click', startRoulette);
+$('#rlStop').addEventListener('click', stopRoulette);
+
+// ---- 設定パネル ----
+const settingsPanel = $('#settingsPanel');
+
+$('#settingsBtn').addEventListener('click', () => {
+  $('#minRange').value = rangeMin;
+  $('#maxRange').value = rangeMax;
+  $('#diceSpeed').value = diceSpeed;
+  $$('#diceWeights input').forEach((inp) => { inp.value = diceWeights[Number(inp.dataset.face) - 1]; });
+
+  $('#playerSpeed2').value = playerSpeed2;
+  $('#playerSpeed3').value = playerSpeed3;
+  renderPlayerWeightsUI();
+
+  $('#genreSpeed').value = genreSpeed;
+  renderGenreWeightsUI();
+
+  settingsPanel.hidden = false;
+});
+$('#settingsCancel').addEventListener('click', () => { settingsPanel.hidden = true; });
+$('#settingsApply').addEventListener('click', () => {
+  rangeMin = clamp(Number($('#minRange').value) || 1, 1, 99);
+  rangeMax = clamp(Number($('#maxRange').value) || 4, rangeMin, 99);
+  diceSpeed = clamp(Number($('#diceSpeed').value) || 60, 20, 500);
+  $$('#diceWeights input').forEach((inp) => {
+    diceWeights[Number(inp.dataset.face) - 1] = Math.max(0, Number(inp.value) || 0);
+  });
+
+  playerSpeed2 = clamp(Number($('#playerSpeed2').value) || 80, 20, 500);
+  playerSpeed3 = clamp(Number($('#playerSpeed3').value) || 80, 20, 500);
+  const newPlayerWeights = {};
+  $$('#playerWeightsBox input').forEach((inp) => {
+    newPlayerWeights[inp.dataset.name] = Math.max(0, Number(inp.value) || 0);
+  });
+  playerWeights = newPlayerWeights;
+
+  genreSpeed = clamp(Number($('#genreSpeed').value) || 80, 20, 500);
+  const newGenreWeights = {};
+  $$('#genreWeightsBox input').forEach((inp) => {
+    newGenreWeights[inp.dataset.name] = Math.max(0, Number(inp.value) || 0);
+  });
+  genreWeights = newGenreWeights;
+
+  settingsPanel.hidden = true;
+});
+
+// ---- Excel読み込み（「メンバールーレット」シートを使う。全画面で1つのExcelを共有する） ----
+// A列 → プレイヤー名簿（プレイヤー1のドロップダウン候補 兼 プレイヤー2・3のルーレット対象）
+// B列 → メンバーのルーレット出現確率初期値（未入力は1）
+// C列 → ジャンル一覧
+// D列 → ジャンルのルーレット出現確率初期値（未入力は1）
+// 1行目はヘッダーとして除外し、2行目以降のデータだけを使う
+async function applyWorkbook(file) {
+  const rows = await readSheet(file, /メンバールーレット/);
+  const dataRows = rows.slice(1); // 1行目（見出し）は除外
+
+  const names = [];
+  const newPlayerWeights = {};
+  const loadedGenres = [];
+  const newGenreWeights = {};
+
+  dataRows.forEach((r) => {
+    const name = (r[0] ?? '').trim();
+    if (name) {
+      names.push(name);
+      const w = Number(r[1]);
+      newPlayerWeights[name] = Number.isFinite(w) && w >= 0 ? w : 1;
+    }
+    const genre = (r[2] ?? '').trim();
+    if (genre) {
+      loadedGenres.push(genre);
+      const w = Number(r[3]);
+      newGenreWeights[genre] = Number.isFinite(w) && w >= 0 ? w : 1;
+    }
+  });
+
+  if (!names.length && !loadedGenres.length) {
+    throw new Error('A列にメンバー名、C列にジャンル名が見つかりませんでした');
+  }
+
+  if (names.length) {
+    playerNames = names;
+    playerWeights = newPlayerWeights;
+    renderPlayerRoster();
+  }
+  if (loadedGenres.length) {
+    genres = loadedGenres;
+    genreWeights = newGenreWeights;
+  }
+
+  const parts = [];
+  if (names.length) parts.push(`プレイヤー${names.length}人`);
+  if (loadedGenres.length) parts.push(`ジャンル${loadedGenres.length}件`);
+  return parts.join(' / ');
+}
+
+$('#fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    await xlsxSync.saveWorkbook(file);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  try {
+    const summary = await applyWorkbook(file);
+    alert(`${summary} を読み込みました`);
+  } catch (err) {
+    alert(`読み込みに失敗しました：${err.message}`);
+  }
+});
+
+// ---- 読み込みデータのクリア（Excelを解除し、プレイヤー・ジャンルを初期状態に戻す） ----
+$('#clearWorkbookBtn').addEventListener('click', () => {
+  if (!confirm('読み込んだExcelを解除して、プレイヤー・ジャンルを初期状態に戻します。よろしいですか？')) return;
+  xlsxSync.clearWorkbook();
+  playerNames = ['プレイヤー1', 'プレイヤー2', 'プレイヤー3'];
+  playerWeights = {};
+  genres = rouletteItems.map((it) => it.label);
+  genreWeights = {};
+  renderPlayerRoster();
+  renderPlayerWeightsUI();
+  renderGenreWeightsUI();
+  alert('読み込みデータをクリアしました');
+});
+
+// ---- すべて初期値に戻す（タイマー・読み込みデータ・進むマス/プレイヤー/ジャンルの設定を一括リセット） ----
+$('#resetAllBtn').addEventListener('click', () => {
+  if (!confirm('タイマー・読み込みファイル・各種設定など、この画面のすべてを初期値に戻します。よろしいですか？')) return;
+
+  // タイマー
+  stopTimer();
+  remain = 120 * 60;
+  ringMax = remain;
+  renderTimer();
+  saveTimerState();
+
+  // 進むマス
+  rangeMin = 1;
+  rangeMax = 4;
+  diceSpeed = 60;
+  diceWeights = [1, 1, 1, 1];
+
+  // プレイヤー/ジャンルの入れ替わり速度
+  playerSpeed2 = 80;
+  playerSpeed3 = 80;
+  genreSpeed = 80;
+
+  // 読み込みデータ（Excel・プレイヤー・ジャンル）
+  xlsxSync.clearWorkbook();
+  playerNames = ['プレイヤー1', 'プレイヤー2', 'プレイヤー3'];
+  playerWeights = {};
+  genres = rouletteItems.map((it) => it.label);
+  genreWeights = {};
+  renderPlayerRoster();
+
+  // 設定パネルの表示も最新値に更新
+  $('#minRange').value = rangeMin;
+  $('#maxRange').value = rangeMax;
+  $('#diceSpeed').value = diceSpeed;
+  $$('#diceWeights input').forEach((inp) => { inp.value = diceWeights[Number(inp.dataset.face) - 1]; });
+  $('#playerSpeed2').value = playerSpeed2;
+  $('#playerSpeed3').value = playerSpeed3;
+  renderPlayerWeightsUI();
+  $('#genreSpeed').value = genreSpeed;
+  renderGenreWeightsUI();
+
+  alert('すべて初期値に戻しました');
+});
+
+// 他の画面で読み込み済みのExcelがあれば、起動時に自動で取り込む
+async function syncWorkbookFromStorage() {
+  try {
+    const file = await xlsxSync.loadWorkbook();
+    if (!file) return;
+    await applyWorkbook(file);
+  } catch (err) { console.warn('[ルーレット]', err.message); }
+}
+
+syncWorkbookFromStorage();
+
+// 他の画面でExcelが読み込まれたら、この画面も自動的に反映する
+xlsxSync.onWorkbookChange(syncWorkbookFromStorage);
+
+onKey({ ' ': () => (genreSpinId || diceRAF || spinTextId ? stopRoulette() : startRoulette()) });
+
+renderTimer();
+</script>
+</body>
+</html>

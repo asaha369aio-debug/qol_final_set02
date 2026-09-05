@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ビジュアルクイズ画面</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  body { overflow: hidden; }
+  main {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 230px 1fr;
+    gap: 14px; padding: 14px;
+  }
+
+  /* ---- 左サイドバー ---- */
+  .side {
+    display: flex; flex-direction: column; gap: 12px;
+    min-height: 0;
+  }
+  .side .group { display: grid; gap: 8px; }
+  .side label { font-size: 12px; color: var(--muted); font-weight: 700; }
+  .side select, .side input[type="number"] {
+    font: inherit; color: var(--fg);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; width: 100%;
+  }
+  .grid-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .side .spacer { flex: 1; }
+  .remain { font-size: 13px; font-weight: 700; color: var(--accent); text-align: center; }
+
+  .filebtn {
+    display: block; text-align: center; cursor: pointer;
+    font-size: 13px; font-weight: 700;
+    border: 1px dashed var(--line); border-radius: 10px;
+    padding: 10px; color: var(--muted);
+  }
+  .filebtn:hover { border-color: var(--accent); color: var(--fg); }
+  .filebtn input { display: none; }
+
+  /* ---- 右：画像＋パネルグリッド ---- */
+  .arena {
+    position: relative; min-width: 0; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wrap {
+    position: relative;
+    border-radius: 10px; overflow: hidden;
+    box-shadow: var(--shadow);
+    background: #10133a;
+  }
+  .wrap img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; object-fit: fill;
+    display: block;
+  }
+  .panels {
+    position: absolute; inset: 0;
+    display: grid; gap: 0;
+    background: transparent;
+  }
+  .panel-tile {
+    background: #4472c4;
+    display: grid; place-items: center;
+    color: #fff; font-weight: 700;
+    font-size: clamp(20px, 3.6vh, 36px);
+    cursor: pointer; user-select: none;
+    transition: opacity .45s ease, transform .45s ease;
+  }
+  .panel-tile:hover { filter: brightness(1.12); }
+  .panel-tile.gone { opacity: 0; transform: scale(.7); pointer-events: none; }
+
+  .empty-note {
+    color: var(--muted); font-size: 14px; text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <aside class="side">
+    <div class="group">
+      <label for="dataSelect">データ選択</label>
+      <select id="dataSelect"></select>
+    </div>
+
+    <div class="group">
+      <div class="grid-inputs">
+        <div>
+          <label for="rowsInput">縦マス数</label>
+          <input type="number" id="rowsInput" min="1" max="20" value="8">
+        </div>
+        <div>
+          <label for="colsInput">横マス数</label>
+          <input type="number" id="colsInput" min="1" max="26" value="12">
+        </div>
+      </div>
+      <button class="btn sm" id="applyBtn">マス数適用</button>
+    </div>
+
+    <button class="btn" id="removeBtn">ランダムで1枚消す</button>
+    <div class="remain" id="remain"></div>
+
+    <div class="group">
+      <button class="btn sm ghost" id="revealBtn">全部消す</button>
+      <button class="btn sm ghost" id="resetBtn">全部戻す</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <label class="filebtn">
+      📂 フォルダを読み込む
+      <input type="file" id="folderInput" webkitdirectory>
+    </label>
+  </aside>
+
+  <div class="arena" id="arena">
+    <div class="wrap" id="wrap" hidden>
+      <img id="photo" alt="問題画像">
+      <div class="panels" id="panels"></div>
+    </div>
+    <div class="empty-note" id="emptyNote">
+      左下の「ファイル読み込み」から問題画像を追加してください
+    </div>
+  </div>
+</main>
+
+<script src="../js/common.js"></script>
+<script>
+const { $, mountTopbar, clamp, randInt } = QOL;
+
+mountTopbar('visual');
+
+const dataSelect = $('#dataSelect');
+const wrap = $('#wrap'), photo = $('#photo'), panelsEl = $('#panels');
+const arena = $('#arena'), emptyNote = $('#emptyNote'), remainEl = $('#remain');
+
+// ---- 画像データ ----
+// 初期状態でも動くようにサンプル画像をcanvasで生成しておく
+function makeSample(text, bg1, bg2) {
+  const cv = document.createElement('canvas');
+  cv.width = 1280; cv.height = 720;
+  const g = cv.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 1280, 720);
+  grad.addColorStop(0, bg1);
+  grad.addColorStop(1, bg2);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1280, 720);
+  g.fillStyle = 'rgba(255,255,255,.25)';
+  for (let i = 0; i < 24; i++) {
+    g.beginPath();
+    g.arc(Math.random() * 1280, Math.random() * 720, 20 + Math.random() * 70, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = '#fff';
+  g.font = '900 140px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 640, 360);
+  return cv.toDataURL('image/png');
+}
+
+const images = [
+  { name: 'サンプル1', url: makeSample('サンプル 1', '#ff5c8a', '#6b2fa0') },
+  { name: 'サンプル2', url: makeSample('サンプル 2', '#1f9ce9', '#17a34a') },
+];
+let current = 0;
+let rows = 8, cols = 12;
+let ratio = 1280 / 720;
+
+function renderSelect() {
+  dataSelect.innerHTML = '';
+  images.forEach((img, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = img.name;
+    dataSelect.appendChild(opt);
+  });
+  dataSelect.value = current;
+}
+
+// 画像の縦横比を保ったままエリア内に最大サイズで収める
+function fitWrap() {
+  const w = arena.clientWidth, h = arena.clientHeight;
+  if (!w || !h) return;
+  let fw = w, fh = w / ratio;
+  if (fh > h) { fh = h; fw = h * ratio; }
+  wrap.style.width = `${Math.floor(fw)}px`;
+  wrap.style.height = `${Math.floor(fh)}px`;
+}
+
+function buildPanels() {
+  panelsEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  panelsEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+  panelsEl.innerHTML = '';
+  for (let n = 1; n <= rows * cols; n++) {
+    const tile = document.createElement('div');
+    tile.className = 'panel-tile';
+    tile.textContent = n;
+    tile.addEventListener('click', () => {
+      tile.classList.add('gone');
+      updateRemain();
+    });
+    panelsEl.appendChild(tile);
+  }
+  updateRemain();
+}
+
+function updateRemain() {
+  const left = panelsEl.querySelectorAll('.panel-tile:not(.gone)').length;
+  remainEl.textContent = `残り ${left} / ${rows * cols} 枚`;
+}
+
+function show(i) {
+  current = i;
+  const img = images[current];
+  emptyNote.hidden = true;
+  wrap.hidden = false;
+  photo.onload = () => {
+    ratio = photo.naturalWidth / photo.naturalHeight || 16 / 9;
+    fitWrap();
+  };
+  photo.src = img.url;
+  buildPanels(); // 画像を切り替えたらパネルは全部戻す
+}
+
+function removeRandom() {
+  const alive = [...panelsEl.querySelectorAll('.panel-tile:not(.gone)')];
+  if (!alive.length) return;
+  alive[randInt(alive.length)].classList.add('gone');
+  updateRemain();
+}
+
+// ---- イベント ----
+dataSelect.addEventListener('change', () => show(Number(dataSelect.value)));
+
+$('#applyBtn').addEventListener('click', () => {
+  rows = clamp(Number($('#rowsInput').value) || 8, 1, 20);
+  cols = clamp(Number($('#colsInput').value) || 12, 1, 26);
+  $('#rowsInput').value = rows;
+  $('#colsInput').value = cols;
+  buildPanels();
+});
+
+$('#removeBtn').addEventListener('click', removeRandom);
+$('#revealBtn').addEventListener('click', () => {
+  panelsEl.querySelectorAll('.panel-tile').forEach((t) => t.classList.add('gone'));
+  updateRemain();
+});
+$('#resetBtn').addEventListener('click', buildPanels);
+
+function addImages(files) {
+  // 画像以外（フォルダ内の他ファイル）は除外し、名前順で追加
+  const imgs = files
+    .filter((f) => f.type.startsWith('image/'))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ja', { numeric: true }));
+  if (!imgs.length) return;
+  const startIndex = images.length;
+  imgs.forEach((f) => {
+    images.push({ name: f.name.replace(/\.[^.]+$/, ''), url: URL.createObjectURL(f) });
+  });
+  renderSelect();
+  dataSelect.value = startIndex;
+  show(startIndex);
+}
+
+$('#folderInput').addEventListener('change', (e) => addImages([...e.target.files]));
+window.addEventListener('resize', fitWrap);
+
+renderSelect();
+show(0);
+</script>
+</body>
+</html>
