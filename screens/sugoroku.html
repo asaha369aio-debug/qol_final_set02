@@ -151,24 +151,28 @@ let players = defaultPlayers;
 mountTopbar('banmen');
 
 // ---- 盤面の状態を保持（画面切り替えでiframeが再読み込みされても消えないようにする） ----
-// タブを閉じるまで保持したいのでsessionStorageを使う
-const STORAGE_KEY = 'qol:sugoroku-state';
+// バランスルーレット画面と共有するため、親フレーム（index.html）経由のpostMessageで中継する。
+// file://で開くとブラウザによってはlocalStorage/BroadcastChannel/storageイベントが
+// 画面（iframe）間で共有・配信されないことがあるため、それらには頼らない
+// （postMessageはorigin/file://の制限を受けず、親子関係さえあれば必ず届く）。
 function saveState() {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-      state, active, log: logEl.textContent,
-    }));
-  } catch (err) { /* 保存できなくても致命的ではないので無視 */ }
+  window.parent.postMessage({
+    type: 'qol:board:save',
+    payload: { state, active, log: logEl.textContent },
+  }, '*');
 }
-function loadSavedState() {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const saved = JSON.parse(raw);
-    if (!Array.isArray(saved.state) || !saved.state.length) return null;
-    return saved;
-  } catch (err) { return null; }
-}
+window.addEventListener('message', (e) => {
+  const msg = e.data;
+  if (!msg || msg.type !== 'qol:board:update') return;
+  const saved = msg.payload;
+  if (!saved || !Array.isArray(saved.state) || !saved.state.length) return;
+  state = saved.state;
+  active = clamp(saved.active ?? active, 0, state.length - 1);
+  playerCountSelect.value = Math.min(state.length, players.length) || players.length;
+  logEl.textContent = saved.log || '';
+  renderPieces();
+  renderChips();
+});
 
 const GOAL = cells.length - 1;
 const boardEl = $('#board');
@@ -229,14 +233,9 @@ function buildState(count) {
 let state = buildState(players.length);
 let active = 0; // 今どのプレイヤーのコマを動かすか
 
-// 画面切り替え直後（iframe再読み込み直後）は、保存されていた盤面状態を復元する
-const savedOnLoad = loadSavedState();
-if (savedOnLoad) {
-  state = savedOnLoad.state;
-  active = clamp(savedOnLoad.active ?? 0, 0, state.length - 1);
-  playerCountSelect.value = Math.min(state.length, players.length) || players.length;
-  logEl.textContent = savedOnLoad.log || '';
-}
+// 画面切り替え直後（iframe再読み込み直後）は、親フレームに現在の盤面状態を問い合わせて復元する
+// （応答は上のmessageリスナーに非同期で届き、あれば state/active/log を上書きして再描画する）
+window.parent.postMessage({ type: 'qol:board:request' }, '*');
 
 // 名簿（Excel）が更新されたら、人数選択肢と現在の状態を作り直す。
 // 名前が既存の駒と一致する場合は位置を引き継ぎ、切り替え時の再読み込みで
@@ -382,18 +381,6 @@ $('#resetBtn').addEventListener('click', () => {
 });
 onKey({ ArrowRight: () => step(1), ArrowLeft: () => step(-1) });
 window.addEventListener('resize', fitBoard);
-
-// バランスルーレット画面など、別iframeから盤面状態（sessionStorage）が更新されたときに即時反映する
-window.addEventListener('storage', (e) => {
-  if (e.key !== STORAGE_KEY) return;
-  const saved = loadSavedState();
-  if (!saved) return;
-  state = saved.state;
-  active = clamp(saved.active ?? active, 0, state.length - 1);
-  logEl.textContent = saved.log || '';
-  renderPieces();
-  renderChips();
-});
 
 boardImg.addEventListener('load', fitBoard);
 boardImg.src = `../${board.image}`;

@@ -6,84 +6,93 @@
 <title>バランスルーレット画面</title>
 <link rel="stylesheet" href="../css/common.css">
 <style>
-  /* ---- デザイン比較用の変数（既定値＝現行デザイン） ---- */
+  /* ---- 配色：白地＋極太の黒枠というフラットなUI ---- */
   :root {
-    --block-a: #2a2a2a;
-    --block-b: #0a0a0a;
-    --block-border: rgba(255, 255, 255, 0.25);
-    --settings-a: #232a70;
-    --settings-b: #141845;
-    --ring-core: #10143a;
+    --ink: #111111;
+    --paper: #ffffff;
+    --page: #d6d6d6;
+    --hair: rgba(17, 17, 17, .55);
   }
 
-  body { overflow: hidden; }
+  body {
+    overflow: hidden;
+    background: var(--page);
+    color: var(--ink);
+  }
+  /* 共通ヘッダー（3色ドット＋タイトル）も白地に合わせる */
+  .window-header { background: none; padding: 8px 20px 2px; }
+  .window-header .title { color: var(--ink); }
+
   main {
     flex: 1; min-height: 0;
     display: grid;
-    grid-template-columns: minmax(220px, 340px) 1fr;
-    gap: 12px;
+    grid-template-columns: minmax(240px, 350px) 1fr;
+    grid-template-rows: 1fr auto;
+    gap: 10px;
+    margin: 4px 12px 12px;
     padding: 12px;
+    background: #e9e9e9;
+    border: 5px solid var(--ink);
+    border-radius: 20px;
+    box-shadow: 0 0 0 4px #ffe500;
   }
 
+  /* 白地＋黒枠の箱。画面内のほぼすべてのパーツがこれを土台にする */
   .block {
-    background: linear-gradient(160deg, var(--block-a), var(--block-b));
-    border: 1px solid var(--block-border);
-    border-radius: 12px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-    color: #fff;
+    background: var(--paper);
+    border: 4px solid var(--ink);
+    border-radius: 14px;
+    color: var(--ink);
     display: flex; align-items: center; justify-content: center;
     text-align: center;
   }
-  .block.click { cursor: pointer; user-select: none; transition: filter .12s ease, transform .08s ease; }
-  .block.click:hover { filter: brightness(1.1); }
+  .block.click { cursor: pointer; user-select: none; transition: background .12s ease, color .12s ease, transform .08s ease; }
+  .block.click:hover { background: #ededed; }
   .block.click:active { transform: translateY(2px); }
-  .block.click:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+  .block.click:disabled { opacity: .35; cursor: not-allowed; background: var(--paper); transform: none; }
 
-  /* ---- 左：タイマー / ジャンル / 進むマス / 設定・読み込み ---- */
+  /* 黒ベタのボタン（-1/+1/START/STOP・設定・ルーレット操作） */
+  .block.solid { background: var(--ink); color: var(--paper); border-radius: 10px; }
+  .block.solid.click:hover { background: #333; }
+  .block.solid.click:disabled { opacity: .35; background: var(--ink); }
+
+  /* ---- 左：タイマー / ジャンル / 進むマス ---- */
   .left-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 
   .board-image {
-    width: 100%; max-height: 100px;
-    object-fit: contain;
+    width: 64%; max-height: 82px;
+    object-fit: contain; object-position: left center;
     flex: 0 0 auto;
   }
 
-  /* リング型：残り時間を円弧の減り具合で表現する */
-  .timer-block { display: flex; flex-direction: column; align-items: center; gap: 14px; flex: 0 0 auto; padding: 14px 0 2px; }
+  .timer-block { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 
-  .timer-ring {
+  /* 残り時間は箱の中の塗り（左から減っていく）で表現する */
+  .timer-box {
     --pct: 100%;
-    --ring-color: var(--accent);
-    width: min(92%, 200px);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background:
-      radial-gradient(closest-side, var(--ring-core) 76%, transparent 77% 100%),
-      conic-gradient(var(--ring-color) 0% var(--pct), rgba(255, 255, 255, 0.14) var(--pct) 100%);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.3s ease;
+    height: clamp(84px, 12.5vh, 118px);
+    border-radius: 18px;
+    background: linear-gradient(to right, var(--paper) 0 var(--pct), #d2d2d2 var(--pct) 100%);
+    transition: background .3s ease;
   }
   .timer-ring-inner {
     font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif;
-    font-variation-settings: "wght" 700, "wdth" 68;
-    font-size: clamp(44px, 7.5vw, 66px); font-weight: 700; letter-spacing: -0.09em;
+    font-variation-settings: "wght" 800, "wdth" 68;
+    font-size: clamp(42px, 6.6vw, 66px); font-weight: 800; letter-spacing: -0.06em;
     font-variant-numeric: tabular-nums;
-    color: #fff;
+    color: var(--ink);
   }
-  .timer-ring.warn { --ring-color: #ffd54a; }
-  .timer-ring.warn .timer-ring-inner { color: #ffd54a; }
-  .timer-ring.danger { --ring-color: #ff6b6b; }
-  .timer-ring.danger .timer-ring-inner { color: #ff6b6b; }
+  .timer-box.warn { background: #ffefb0; }
+  .timer-box.danger { background: #ffd4d4; }
 
-  .timer-btns { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1.2fr; gap: 6px; width: 100%; height: 40px; }
-  .timer-btns .block { font-weight: 800; font-size: 18px; border-radius: 8px; }
+  .timer-btns { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1.4fr; gap: 8px; height: 46px; }
+  .timer-btns .block { font-weight: 900; font-size: clamp(15px, 1.7vw, 20px); letter-spacing: .02em; }
 
-  .genre-box { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; flex: 0 0 auto; height: 64px; }
+  .genre-box { font-size: clamp(24px, 3.4vw, 40px); font-weight: 900; flex: 0 0 auto; height: clamp(70px, 11vh, 100px); }
 
   /* ---- 進むマス：1〜4の目を持つ3Dキューブ ---- */
   .result-box {
-    font-size: clamp(24px, 3.4vw, 36px); font-weight: 900;
+    font-size: clamp(24px, 3.6vw, 42px); font-weight: 900;
     flex-direction: column; gap: 8px;
     flex: 1 1 auto; min-height: 90px;
   }
@@ -101,14 +110,14 @@
   .dice-face {
     position: absolute; inset: 0;
     background: #fff; border-radius: 12px;
-    box-shadow: inset 0 0 0 3px rgba(0,0,0,.12), 0 6px 14px rgba(0,0,0,.35);
+    box-shadow: inset 0 0 0 3px var(--ink), 0 4px 10px rgba(0,0,0,.25);
     display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
     padding: 14%;
     transform: rotateY(var(--deg)) translateZ(42px);
   }
   .dice-face .pip {
     width: 100%; aspect-ratio: 1; border-radius: 50%;
-    background: #1a1030; align-self: center; justify-self: center;
+    background: var(--ink); align-self: center; justify-self: center;
     opacity: 0;
   }
   /* 3x3の升目のうち、どこに点を置くかを面ごとに指定 */
@@ -117,74 +126,94 @@
   .dice-face[data-n="3"] .p1, .dice-face[data-n="3"] .p5, .dice-face[data-n="3"] .p9 { opacity: 1; }
   .dice-face[data-n="4"] .p1, .dice-face[data-n="4"] .p3, .dice-face[data-n="4"] .p7, .dice-face[data-n="4"] .p9 { opacity: 1; }
 
-  .result-label { font-size: clamp(16px, 2vw, 22px); font-weight: 800; opacity: .95; }
+  .result-label { font-size: clamp(16px, 2vw, 22px); font-weight: 900; }
 
-  .left-spacer { flex: 1; }
+  /* ---- 右：バランス表（6行） ---- */
+  .right-col { display: grid; grid-template-rows: 1fr; gap: 10px; min-height: 0; }
 
-  .left-bottom { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 70px; }
-  .left-bottom .block { font-weight: 800; font-size: 19px; line-height: 1.3; }
-  .left-bottom label input { display: none; }
+  .rows-table { display: grid; grid-template-rows: repeat(6, 1fr); gap: 10px; min-height: 0; }
 
-  /* ---- 右：バランス表（6行） / 開始終了・観客 ---- */
-  .right-col { display: grid; grid-template-rows: 1fr auto; gap: 10px; min-height: 0; }
-
-  .rows-table { display: grid; grid-template-rows: repeat(6, 1fr); gap: 8px; min-height: 0; }
+  /* 1行＝白地の横長カプセル。中の仕切りは細い縦線だけで区切る */
   .balance-row {
-    display: grid; grid-template-columns: 0.7fr 0.9fr 3fr 1.2fr 1.2fr;
-    gap: 8px; min-height: 0;
-    transition: filter .15s ease, opacity .15s ease;
+    display: grid; grid-template-columns: 0.6fr 0.7fr 3fr 1fr 1fr;
+    min-height: 0;
+    background: var(--paper);
+    border: 4px solid var(--ink);
+    border-radius: 16px;
+    transition: opacity .15s ease;
   }
+  .balance-row.dim { opacity: .4; }
+  .balance-row > .block {
+    position: relative;
+    background: none; border: none; border-radius: 0;
+    padding: 2px;
+  }
+  .balance-row > .block + .block::before {
+    content: ''; position: absolute; left: 0; top: 18%; bottom: 18%;
+    width: 2px; background: var(--hair);
+  }
+  .balance-row > .block.click:hover { background: rgba(0, 0, 0, .06); }
+  .balance-row > .block.click:active { transform: none; }
 
-  .turn-btn { font-size: clamp(18px, 2vw, 24px); }
-  .turn-btn.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 213, 74, .35); }
+  .turn-btn { font-size: clamp(18px, 2vw, 26px); font-weight: 900; border-radius: 12px 0 0 12px; }
+  .turn-btn.active { background: var(--ink); color: var(--paper); }
 
-  .oc-cell { font-size: clamp(20px, 2.4vw, 30px); font-weight: 900; }
-  .oc-cell.hit { color: var(--accent); }
+  .oc-cell { font-size: clamp(20px, 2.6vw, 32px); font-weight: 900; }
+  .oc-cell.hit { color: var(--ink); }
 
-  .name-cell { font-size: clamp(18px, 2.2vw, 30px); font-weight: 800; padding: 4px 10px; overflow: hidden; }
+  .name-cell { font-size: clamp(18px, 2.2vw, 28px); font-weight: 700; padding: 4px 10px; overflow: hidden; letter-spacing: .12em; }
   .name-cell input {
-    font: inherit; font-weight: 800; text-align: center;
-    color: #fff; background: transparent; border: none;
+    font: inherit; font-weight: 700; text-align: center;
+    color: var(--ink); background: transparent; border: none;
     width: 100%;
   }
 
-  .prob-cell, .remain-cell { flex-direction: column; gap: 2px; font-size: clamp(18px, 2vw, 26px); font-weight: 800; }
-  .prob-cell .sub, .remain-cell .sub { font-size: 11px; font-weight: 600; opacity: .75; }
+  .prob-cell, .remain-cell { flex-direction: column; gap: 2px; font-size: clamp(16px, 1.9vw, 24px); font-weight: 900; }
+  .prob-cell .sub, .remain-cell .sub { font-size: 11px; font-weight: 700; opacity: .75; }
 
-  .action-row {
-    display: grid; grid-template-columns: 1fr 1fr auto 1fr 1.6fr;
-    align-items: stretch; gap: 10px; height: 76px;
+  /* ---- 下段：設定・読み込み・ルーレット操作・観客 ---- */
+  .bottom-bar {
+    grid-column: 1 / -1;
+    display: grid; grid-template-columns: 0.7fr 1.7fr 1.1fr 1.1fr 2fr;
+    gap: 10px; height: 64px;
   }
-  .action-row .block { font-weight: 800; font-size: 22px; }
-  .action-row .plus { background: none; border: none; box-shadow: none; font-size: 30px; font-weight: 900; }
-  .audience-label { font-size: 20px; }
-  .audience-result { font-size: clamp(16px, 1.7vw, 22px); }
-
+  .bottom-bar .block { font-weight: 900; font-size: clamp(15px, 1.8vw, 22px); line-height: 1.2; }
+  .bottom-bar label input { display: none; }
+  .audience-box { gap: 6px; font-size: clamp(15px, 1.8vw, 22px); font-weight: 900; }
+  .audience-result { font-weight: 900; }
   /* ---- 設定パネル ---- */
   .settings-panel {
     position: fixed; inset: 0; z-index: 50;
-    background: rgba(10, 12, 30, 0.6);
+    background: rgba(0, 0, 0, 0.45);
     display: flex; align-items: center; justify-content: center;
   }
   .settings-panel[hidden] { display: none; }
   .settings-box {
     width: min(460px, 90vw);
     display: grid; gap: 14px; padding: 24px;
-    background: linear-gradient(160deg, var(--settings-a), var(--settings-b));
-    border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+    color: var(--ink);
+    background: var(--paper);
+    border: 4px solid var(--ink); border-radius: 16px;
   }
   .settings-box { max-height: 84vh; overflow-y: auto; }
-  .settings-box h2 { margin: 0; font-size: 21px; }
+  .settings-box h2 { margin: 0; font-size: 21px; font-weight: 900; }
   .settings-box h3 {
-    margin: 4px 0 -4px; font-size: 16px; letter-spacing: .08em;
-    color: var(--accent); border-top: 1px solid var(--line); padding-top: 14px;
+    margin: 4px 0 -4px; font-size: 16px; letter-spacing: .08em; font-weight: 900;
+    color: var(--ink); border-top: 2px solid var(--ink); padding-top: 14px;
   }
-  .settings-box label { display: grid; gap: 6px; font-size: 16px; color: var(--muted); }
+  .settings-box label { display: grid; gap: 6px; font-size: 16px; color: var(--ink); }
   .settings-box input, .settings-box textarea {
-    font: inherit; color: var(--fg); background: rgba(0,0,0,.3);
-    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    font: inherit; color: var(--ink); background: #f2f2f2;
+    border: 2px solid var(--ink); border-radius: 8px; padding: 8px 10px;
     resize: vertical;
   }
+  /* 設定パネル内のボタンも白黒に合わせる */
+  .settings-box .btn {
+    color: var(--paper); background: var(--ink);
+    border: 2px solid var(--ink); border-radius: 10px; box-shadow: none;
+  }
+  .settings-box .btn:active { transform: translateY(2px); box-shadow: none; }
+  .settings-box .btn.ghost { color: var(--ink); background: var(--paper); }
   .settings-box .row { display: flex; gap: 10px; justify-content: flex-end; }
   .settings-box .hint { font-size: 14px; opacity: .8; }
 
@@ -207,14 +236,14 @@
   <div class="left-col">
     <img class="board-image" src="../assets/qol_logo.png" alt="QOLロゴ">
     <div class="timer-block">
-      <div class="timer-ring" id="timerRing">
+      <div class="block timer-box" id="timerRing">
         <div class="timer-ring-inner" id="timerDisplay">60:00</div>
       </div>
       <div class="timer-btns">
-        <button class="block click" id="minusBtn">-1</button>
-        <button class="block click" id="plusBtn">+1</button>
-        <button class="block click" id="startTimerBtn">START</button>
-        <button class="block click" id="stopTimerBtn">STOP</button>
+        <button class="block solid click" id="minusBtn">-1</button>
+        <button class="block solid click" id="plusBtn">+1</button>
+        <button class="block solid click" id="startTimerBtn">START</button>
+        <button class="block solid click" id="stopTimerBtn">STOP</button>
       </div>
     </div>
 
@@ -249,23 +278,18 @@
       <span class="result-label" id="resultLabel" hidden></span>
     </div>
 
-    <div class="left-spacer"></div>
-    <div class="left-bottom">
-      <button class="block click" id="settingsBtn">設定</button>
-      <label class="block click" for="fileInput" title="「メンバールーレット」シートのA2〜A7:プレイヤー1〜6の名前／C列:ジャンル／D列:出現確率を読み込みます（全画面共通の1つのExcelを使えます）">読み込み<br>ファイル<input type="file" id="fileInput" accept=".xlsx"></label>
-    </div>
   </div>
 
   <div class="right-col">
     <div class="rows-table" id="rowsTable"></div>
+  </div>
 
-    <div class="action-row">
-      <button class="block click" id="rlStart">ルーレット開始</button>
-      <button class="block click" id="rlStop" disabled>ルーレット終了</button>
-      <span class="block plus">＋</span>
-      <span class="block audience-label">観客</span>
-      <span class="block audience-result" id="audienceResult">0〜3人がランダムで出る</span>
-    </div>
+  <div class="bottom-bar">
+    <button class="block solid click" id="settingsBtn">設定</button>
+    <label class="block solid click" for="fileInput" title="「メンバールーレット」シートのA2〜A7:プレイヤー1〜6の名前／C列:ジャンル／D列:出現確率を読み込みます（全画面共通の1つのExcelを使えます）">読み込みファイル<input type="file" id="fileInput" accept=".xlsx"></label>
+    <button class="block solid click" id="rlStart">ルーレット<br>START</button>
+    <button class="block solid click" id="rlStop" disabled>ルーレット<br>STOP</button>
+    <span class="block audience-box">＋観客：<span class="audience-result" id="audienceResult">0〜3</span></span>
   </div>
 </main>
 
@@ -475,26 +499,25 @@ function probFor(i) {
 }
 
 // ---- banmen（すごろく盤面）画面と「残りマス数」を連動させる ----
-// sugoroku.html がタブ内で共有しているsessionStorageの盤面状態を読み書きし、
+// 親フレーム（index.html）経由のpostMessageで盤面状態を共有し、
 // 名前が一致するプレイヤーの pos（現在マス目）から残りマス数を逆算する。
 // 一致するプレイヤーがbanmen側にいない行は、これまで通りこの画面だけのローカル値を使う。
-const BOARD_STORAGE_KEY = 'qol:sugoroku-state';
+// （localStorage/sessionStorage/BroadcastChannel/storageイベントは、file://で開いた場合に
+//  ブラウザによって画面〈iframe〉間で共有・配信されないことがあるため使わない。postMessageは
+//  origin/file://の制限を受けず、親子関係さえあれば必ず届く。）
 const BOARD_GOAL = sugorokuCells.length - 1;
+let boardRaw = null;   // { state, active, log }（親から届いた最新の盤面状態のローカルキャッシュ）
+let boardReady = false; // 親からの最初の応答（または無応答のタイムアウト）を受け取ったか
 
 function loadBoardRaw() {
-  try {
-    const raw = sessionStorage.getItem(BOARD_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed.state)) return null;
-    return parsed;
-  } catch { return null; }
+  return boardRaw;
 }
 function saveBoardRaw(raw) {
-  try { sessionStorage.setItem(BOARD_STORAGE_KEY, JSON.stringify(raw)); } catch { /* 保存できなくても致命的ではない */ }
+  boardRaw = raw;
+  window.parent.postMessage({ type: 'qol:board:save', payload: raw }, '*');
 }
 
-// banmen画面がまだ一度も開かれていない（sessionStorageに何も無い）場合は、
+// banmen画面がまだ一度も開かれていない（親フレームも何も持っていない）場合は、
 // banmen側と同じ初期状態（既定の名簿・全員スタート位置）を代わりに作っておく。
 // これにより、banmenタブを開く前でもバランス表と盤面の連動が最初から機能する。
 function ensureBoardRaw() {
@@ -504,6 +527,22 @@ function ensureBoardRaw() {
   saveBoardRaw(initRaw);
   return initRaw;
 }
+
+window.addEventListener('message', (e) => {
+  const msg = e.data;
+  if (!msg || msg.type !== 'qol:board:update') return;
+  boardReady = true;
+  if (msg.payload && Array.isArray(msg.payload.state)) {
+    boardRaw = msg.payload;
+    syncRemainFromBoard();
+  }
+});
+// 親フレームに現在の盤面状態を問い合わせる。応答が無い場合（banmenもこの画面も
+// 初回起動で何も無い場合）に備え、少し待って何も届かなければ既定値で自分から起動する。
+window.parent.postMessage({ type: 'qol:board:request' }, '*');
+setTimeout(() => {
+  if (!boardReady) { boardReady = true; syncRemainFromBoard(); }
+}, 250);
 
 // banmen側の現在位置から、名前が一致する行の残りマス数を反映する
 function syncRemainFromBoard() {
@@ -519,6 +558,17 @@ function syncRemainFromBoard() {
   if (changed) renderRows();
 }
 
+// banmen側で同じプレイヤー（旧名）が見つかれば、そのプレイヤーの名前を新しい名前に付け替える
+// （位置＝残りマス数は引き継がれる）。banmen側にまだ存在しない場合は何もしない。
+function renameOnBoard(oldName, newName) {
+  if (!oldName || oldName === newName) return;
+  const raw = ensureBoardRaw();
+  const p = raw.state.find((x) => x.name === oldName);
+  if (!p) return;
+  p.name = newName;
+  saveBoardRaw(raw);
+}
+
 // 設定パネルで残りマス数を直接編集したときも、一致するプレイヤーがいればbanmen側の位置を書き換える
 function applyRemainSetting(row, newRemain) {
   const raw = ensureBoardRaw();
@@ -532,11 +582,6 @@ function applyRemainSetting(row, newRemain) {
   }
 }
 
-// banmen画面（別iframe）でコマが動かされたときも、この画面の残りマス数へ即時反映する
-window.addEventListener('storage', (e) => {
-  if (e.key === BOARD_STORAGE_KEY) syncRemainFromBoard();
-});
-
 const rowsTable = $('#rowsTable');
 const rowEls = [];
 
@@ -549,7 +594,7 @@ function renderRows() {
 
     const turnBtn = document.createElement('button');
     turnBtn.className = 'block click turn-btn';
-    turnBtn.textContent = i === currentTurn ? '▶' : '';
+    turnBtn.textContent = '▶';
     turnBtn.title = '現在のプレイヤーを明示';
     turnBtn.addEventListener('click', () => {
       currentTurn = currentTurn === i ? null : i;
@@ -595,7 +640,8 @@ function renderRowResult(i) {
 }
 
 renderRows();
-syncRemainFromBoard();
+// 盤面状態との同期は、親フレームからの応答（またはタイムアウト）後に行う
+// （上の message リスナー／setTimeout を参照）。ここでは呼ばない。
 
 // ---- ジャンルの「出る確率」編集UI（一覧ごとに数値入力を並べる） ----
 function renderGenreWeightsUI() {
@@ -752,7 +798,7 @@ function stopRoulette() {
 
   // 観客：0〜3人がランダムに選ばれる
   const audienceCount = randInt(4);
-  audienceResult.textContent = `観客${audienceCount}人`;
+  audienceResult.textContent = `${audienceCount}人`;
 }
 $('#rlStart').addEventListener('click', startRoulette);
 $('#rlStop').addEventListener('click', stopRoulette);
@@ -794,7 +840,11 @@ $('#settingsApply').addEventListener('click', () => {
   $$('#balanceRowsBox input').forEach((inp) => {
     const row = balanceRows[Number(inp.dataset.index)];
     if (!row) return;
-    if (inp.dataset.field === 'name') row.name = inp.value.trim() || row.name;
+    if (inp.dataset.field === 'name') {
+      const newName = inp.value.trim() || row.name;
+      renameOnBoard(row.name, newName);
+      row.name = newName;
+    }
     if (inp.dataset.field === 'remain') applyRemainSetting(row, Math.max(0, Number(inp.value) || 0));
   });
   renderRows();
@@ -820,12 +870,18 @@ async function applyWorkbook(file) {
     }
   });
 
-  // A2〜A7（dataRowsの先頭6件）を、プレイヤー1〜6の名前としてそのまま割り当てる
+  // A2〜A7（dataRowsの先頭6件）を、プレイヤー1〜6の名前としてそのまま割り当てる。
+  // banmen画面がまだこのExcelを取り込んでいない（＝盤面側が古い名前のまま）場合に備え、
+  // 盤面側の同じプレイヤーもここで一緒に改名しておく（そうしないと名前が一致せず、
+  // 残りマス数がbanmenと連動しなくなる）。
   let namedCount = 0;
   for (let i = 0; i < ROW_COUNT; i++) {
     const name = (dataRows[i]?.[0] ?? '').trim();
-    if (name) {
+    if (name && name !== balanceRows[i].name) {
+      renameOnBoard(balanceRows[i].name, name);
       balanceRows[i].name = name;
+      namedCount++;
+    } else if (name) {
       namedCount++;
     }
   }
@@ -901,7 +957,7 @@ $('#resetAllBtn').addEventListener('click', () => {
   currentTurn = null;
   renderRows();
   syncRemainFromBoard();
-  audienceResult.textContent = '0〜3人がランダムで出る';
+  audienceResult.textContent = '0〜3';
 
   $('#minRange').value = rangeMin;
   $('#maxRange').value = rangeMax;

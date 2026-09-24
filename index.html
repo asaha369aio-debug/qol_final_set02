@@ -136,6 +136,27 @@ function select(id, { push = true } = {}) {
 // ハッシュで直接その画面を開けるようにする（例: index.html#ogiri）
 window.addEventListener('hashchange', () => select(location.hash.slice(1), { push: false }));
 select(location.hash.slice(1) || screens[0].id);
+
+// ---- すごろく盤面の状態を画面間で中継する ----
+// file://で開くとブラウザによってはlocalStorage/BroadcastChannel/storageイベントが
+// 画面（iframe）間で共有・配信されないことがあるため、それらには頼らず、
+// 親であるこの画面がpostMessageで直接橋渡しする（postMessageはorigin/file://の
+// 制限を受けず、iframeの参照さえあれば必ず届く）。
+let boardState = null; // { state, active, log }（banmen ⇔ バランスルーレットで共有）
+window.addEventListener('message', (e) => {
+  const msg = e.data;
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'qol:board:save') {
+    boardState = msg.payload;
+    Object.values(frames).forEach((f) => {
+      if (f.contentWindow && f.contentWindow !== e.source) {
+        f.contentWindow.postMessage({ type: 'qol:board:update', payload: boardState }, '*');
+      }
+    });
+  } else if (msg.type === 'qol:board:request') {
+    if (e.source) e.source.postMessage({ type: 'qol:board:update', payload: boardState }, '*');
+  }
+});
 </script>
 </body>
 </html>
