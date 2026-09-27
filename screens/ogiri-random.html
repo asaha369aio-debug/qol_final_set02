@@ -120,10 +120,18 @@
     padding: 0 8px; text-align: center;
     font-size: clamp(18px, 3.4vw, 46px); font-weight: 900; line-height: 1.1;
     overflow-wrap: anywhere; overflow: hidden;
-    color: #b5b5b5;
+    color: #dcdcdc;
   }
   /* まん中の枠に来ているワードだけ黒。上下のワードはグレー */
   .reel .item.center { color: var(--ink); }
+  /* 上下の枠の外側半分を白で隠す（上段は文字の上半分、下段は文字の下半分が見えない） */
+  .reel::before, .reel::after {
+    content: ''; position: absolute; left: 0; right: 0; z-index: 1;
+    height: calc(100% / 6);
+    background: var(--paper); pointer-events: none;
+  }
+  .reel::before { top: 0; }
+  .reel::after { bottom: 0; }
   .reel.spinning { cursor: pointer; }
   .reel .empty {
     position: absolute; inset: 0;
