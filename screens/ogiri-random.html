@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>oogiri_random</title>
+<link rel="stylesheet" href="../css/common.css">
+<style>
+  /* ---- 配色：白地＋極太の黒枠というフラットなUI（oogiri画面と共通） ---- */
+  :root {
+    --ink: #111111;
+    --paper: #ffffff;
+    --page: #d6d6d6;
+  }
+
+  html, body { overflow: hidden; }
+  body { background: var(--page); color: var(--ink); }
+  /* 共通ヘッダー（3色ドット＋タイトル）も白地に合わせる */
+  .window-header { background: none; padding: 8px 20px 2px; }
+  .window-header .title { color: var(--ink); }
+
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr clamp(120px, 11vw, 160px);
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    margin: 4px 12px 12px;
+    padding: 12px;
+    background: #e9e9e9;
+    border: 5px solid var(--ink);
+    border-radius: 20px;
+    box-shadow: 0 0 0 4px #ffe500;
+  }
+
+  /* 白地＋黒枠の箱 */
+  .block {
+    background: var(--paper);
+    border: 4px solid var(--ink);
+    border-radius: 14px;
+    color: var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .block.click { cursor: pointer; user-select: none; transition: background .12s ease, color .12s ease, transform .08s ease; }
+  .block.click:hover { background: #ededed; }
+  .block.click:active { transform: translateY(2px); }
+  .block.click:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+  /* 黒ベタのボタン */
+  .block.solid { background: var(--ink); color: var(--paper); border-radius: 10px; }
+  .block.solid.click:hover { background: #333; }
+  .block.solid.click:disabled { opacity: .35; background: var(--ink); }
+
+  /* ---- 上段：ロゴ / ジャンル / −10・+10 / タイマー ---- */
+  .top-row {
+    grid-column: 1 / 3;
+    display: flex; align-items: stretch; gap: 10px;
+    height: clamp(58px, 8.5vh, 80px);
+  }
+
+  .board-image {
+    flex: 0 0 auto; width: clamp(100px, 13vw, 170px);
+    object-fit: contain; object-position: left center;
+  }
+
+  .genre-box {
+    flex: 1 1 auto; min-width: 0;
+    background: var(--ink); color: var(--paper); border-radius: 12px;
+    font-size: clamp(22px, 3.2vw, 42px); font-weight: 900; letter-spacing: .08em;
+    cursor: text;
+  }
+  .genre-box input {
+    width: 100%; background: transparent; border: none; color: var(--paper);
+    font: inherit; text-align: center; outline: none;
+  }
+
+  .plus10 {
+    flex: 0 0 clamp(64px, 7vw, 92px);
+    font-size: clamp(16px, 2vw, 26px); font-weight: 900; letter-spacing: -.02em;
+  }
+
+  /* タイマーは右上で一段大きく、スロット枠の上に少しかぶせる */
+  .timer-display {
+    flex: 0 0 clamp(200px, 26vw, 340px);
+    position: relative; z-index: 2;
+    margin-top: -6px; margin-bottom: -18px;
+    border-radius: 18px;
+    font-family: "Bahnschrift", "Segoe UI", system-ui, sans-serif;
+    font-variation-settings: "wght" 800, "wdth" 68;
+    font-size: clamp(38px, 6.6vw, 76px); font-weight: 800; letter-spacing: -0.05em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .timer-display.warn { background: #ffefb0; }
+  .timer-display.danger { background: #ffd4d4; }
+
+  /* ---- 下段：スロット3つ / 右サイド操作 ---- */
+  .stage-box {
+    min-height: 0;
+    background: var(--paper);
+    border: 5px solid var(--ink);
+    border-radius: 18px;
+    padding: clamp(10px, 1.6vw, 22px);
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(8px, 1.4vw, 18px);
+  }
+
+  /* スロット：上から下へ文字が流れ、まん中の1枠が出目になる */
+  .reel {
+    position: relative; min-width: 0; min-height: 0;
+    background: var(--paper);
+    border: 5px solid var(--ink);
+    border-radius: 18px;
+    overflow: hidden;
+    cursor: pointer; user-select: none;
+  }
+  .reel .strip { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+  .reel .item {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 8px; text-align: center;
+    font-size: clamp(18px, 3.4vw, 46px); font-weight: 900; line-height: 1.1;
+    overflow-wrap: anywhere; overflow: hidden;
+  }
+  /* 回っている間はまん中以外も同じ見た目。止まったら出目を少し強調する */
+  .reel.spinning { cursor: pointer; }
+  /* 上段・下段のワードはグレーに見せる（白を半透明で重ね、まん中の出目だけ黒のまま） */
+  .reel::before, .reel::after {
+    content: ''; position: absolute; left: 0; right: 0; height: calc(100% / 3);
+    background: rgba(255, 255, 255, .6);
+    pointer-events: none; z-index: 1;
+  }
+  .reel::before { top: 0; }
+  .reel::after { bottom: 0; }
+  .reel .empty {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(14px, 1.6vw, 20px); font-weight: 800; color: #9a9a9a;
+  }
+
+  /* 右サイド：黒ベタのボタンを縦に並べる */
+  .side {
+    display: grid;
+    /* タイマーがスロット枠にかぶる分、右列は少し下から始める */
+    margin-top: 14px;
+    grid-template-rows: repeat(4, 1fr) 1.5fr 1.5fr 1fr;
+    gap: 8px; min-height: 0;
+  }
+  .side .block {
+    font-size: clamp(13px, 1.5vw, 20px); font-weight: 800; line-height: 1.3;
+  }
+  .side label.block input { display: none; }
+
+  /* ---- 設定パネル ---- */
+  .settings-panel {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settings-panel[hidden] { display: none; }
+  .settings-box {
+    width: min(400px, 90vw); max-height: 84vh; overflow-y: auto;
+    display: grid; gap: 14px; padding: 24px;
+    color: var(--ink);
+    background: var(--paper);
+    border: 4px solid var(--ink); border-radius: 16px;
+  }
+  .settings-box h2 { margin: 0; font-size: 18px; font-weight: 900; }
+  .settings-box label { display: grid; gap: 6px; font-size: 14px; color: var(--ink); }
+  .settings-box input {
+    font: inherit; color: var(--ink); background: #f2f2f2;
+    border: 2px solid var(--ink); border-radius: 8px; padding: 8px 10px;
+  }
+  .settings-box .mmss { display: flex; gap: 8px; align-items: center; }
+  .settings-box .mmss input { width: 80px; text-align: center; }
+  .settings-box .hint { font-size: 12px; opacity: .8; }
+  .settings-box .row { display: flex; gap: 10px; justify-content: flex-end; }
+  .settings-box .btn {
+    color: var(--paper); background: var(--ink);
+    border: 2px solid var(--ink); border-radius: 10px; box-shadow: none;
+  }
+  .settings-box .btn:active { transform: translateY(2px); box-shadow: none; }
+  .settings-box .btn.ghost { color: var(--ink); background: var(--paper); }
+</style>
+</head>
+<body>
+<main>
+  <div class="top-row">
+    <img class="board-image" src="../assets/qol_logo.png" alt="QOLロゴ">
+    <div class="block genre-box" id="genreBox" title="クリックすると書き換えられます"><input id="genreInput" value="ジャンル"></div>
+    <button class="block solid click plus10" data-delta="-10">−10</button>
+    <button class="block solid click plus10" data-delta="10">+10</button>
+    <div class="block timer-display" id="timerDisplay">03:00</div>
+  </div>
+
+  <div class="stage-box" id="stageBox">
+    <div class="reel" data-i="0"><div class="strip"></div></div>
+    <div class="reel" data-i="1"><div class="strip"></div></div>
+    <div class="reel" data-i="2"><div class="strip"></div></div>
+  </div>
+
+  <div class="side">
+    <button class="block solid click" id="startBtn">START</button>
+    <button class="block solid click" id="stopBtn">STOP</button>
+    <button class="block solid click" id="resetBtn">RESET</button>
+    <label class="block solid click" for="fileInput" title="「oogiri_random」シートのA列＝Word1／B列＝Word2／C列＝Word3を読み込みます（1行目は見出しとして無視します）">ファイル<input type="file" id="fileInput" accept=".xlsx"></label>
+    <button class="block solid click" id="spinBtn">スロット<br>回す</button>
+    <button class="block solid click" id="stopSlotBtn">スロット<br>止める</button>
+    <button class="block solid click" id="settingsBtn">設定</button>
+  </div>
+</main>
+
+<div class="settings-panel" id="settingsPanel" hidden>
+  <div class="settings-box">
+    <h2>設定</h2>
+    <label>
+      タイマーの初期値
+      <span class="mmss">
+        <input type="number" id="minInput" min="0" max="99" value="3"> 分
+        <input type="number" id="secInput" min="0" max="59" value="0"> 秒
+      </span>
+      <span class="hint">RESETを押すとこの時間に戻ります。</span>
+    </label>
+    <label>
+      スロットの速さ（1秒あたりに流れる枠の数）
+      <input type="number" id="speedInput" min="1" max="30" step="0.5" value="9">
+    </label>
+    <label>
+      止まるまでの時間（秒）
+      <input type="number" id="brakeInput" min="0.2" max="5" step="0.1" value="1.2">
+    </label>
+    <label>
+      <span class="hint">読み込んだExcelファイルを解除し、サンプルのワードに戻します（全画面で共有しているデータも消えます）。</span>
+      <button class="btn ghost sm" id="clearWorkbookBtn" type="button">読み込みデータをクリア</button>
+    </label>
+    <div class="row">
+      <button class="btn ghost sm" id="settingsCancel" type="button">閉じる</button>
+      <button class="btn sm" id="settingsApply" type="button">適用</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/common.js"></script>
+<script src="../js/xlsx-lite.js"></script>
+<script src="../js/xlsx-sync.js"></script>
+<script>
+const { $, $$, mountTopbar, onKey, clamp, xlsxSync } = QOL;
+const { readSheet } = QOL.xlsxLite;
+
+mountTopbar('oogiri_random');
+
+// ---- Excel未読み込み時のサンプル（A列＝Word1 / B列＝Word2 / C列＝Word3） ----
+const SAMPLE = [
+  ['朝いちばんの', '深夜の', '真夏の', '学校の', '宇宙の'],
+  ['社長が', '猫が', '先生が', 'ロボットが', '宇宙人が'],
+  ['泣いた理由', 'やりがちなこと', '新商品', '必殺技', 'ひとこと'],
+];
+let words = SAMPLE.map((col) => [...col]);
+
+// ---- タイマー（oogiri画面と同じ操作感） ----
+let initialSeconds = 180;
+let remain = initialSeconds;
+let timerId = null;
+const timerDisplay = $('#timerDisplay');
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+function renderTimer() {
+  timerDisplay.textContent = formatTime(remain);
+  timerDisplay.classList.toggle('warn', remain <= 30 && remain > 10);
+  timerDisplay.classList.toggle('danger', remain <= 10);
+}
+function startTimer() {
+  if (timerId) return;
+  timerId = setInterval(() => {
+    remain = Math.max(0, remain - 1);
+    renderTimer();
+    if (remain === 0) stopTimer();
+  }, 1000);
+}
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+}
+function resetTimer() {
+  stopTimer();
+  remain = initialSeconds;
+  renderTimer();
+}
+
+$('#startBtn').addEventListener('click', startTimer);
+$('#stopBtn').addEventListener('click', stopTimer);
+$('#resetBtn').addEventListener('click', resetTimer);
+$$('.plus10').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    remain = clamp(remain + Number(btn.dataset.delta), 0, 99 * 60 + 59);
+    renderTimer();
+  })
+);
+
+// ---- スロット（3つのリール） ----
+// 上から下へ文字が流れ、まん中の枠が出目になる。
+// 同じ並びを3回ぶん敷き詰めておき、offsetを1周ぶんで折り返して途切れなく回す。
+let speed = 9;      // 1秒あたりに流れる枠の数
+let brakeSec = 1.2; // 止めてから停止するまでの時間
+
+const reels = [...document.querySelectorAll('.reel')].map((el, i) => ({
+  el,
+  strip: el.querySelector('.strip'),
+  index: i,
+  itemH: 0,
+  offset: 0,      // 何枠ぶん流れたか（枠単位）
+  spinning: false,
+  brake: null,    // 停止アニメーション中の状態
+  landed: 0,      // 止まったときの出目（words[i]の添字）
+}));
+
+/** リールの中身（同じ並びを3回）を作り直す */
+function buildReel(r) {
+  const list = words[r.index];
+  r.strip.innerHTML = '';
+  r.el.querySelector('.empty')?.remove();
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'ワードなし';
+    r.el.appendChild(empty);
+    return;
+  }
+  r.itemH = Math.max(24, r.el.clientHeight / 3);
+  for (let rep = 0; rep < 3; rep++) {
+    list.forEach((w) => {
+      const item = document.createElement('div');
+      item.className = 'item';
+      item.style.height = `${r.itemH}px`;
+      item.textContent = w;
+      r.strip.appendChild(item);
+    });
+  }
+  applyOffset(r);
+}
+
+/** offset（枠単位）を実際の位置に反映する。まん中の枠に出目が来るようにずらす */
+function applyOffset(r) {
+  const list = words[r.index];
+  if (!list.length) return;
+  const loop = list.length;
+  const o = ((r.offset % loop) + loop) % loop;
+  r.strip.style.transform = `translateY(${r.itemH - o * r.itemH}px)`;
+}
+
+function spin(r) {
+  if (!words[r.index].length) return;
+  r.spinning = true;
+  r.brake = null;
+  r.el.classList.add('spinning');
+}
+
+/** 止める：ランダムな出目まで、だんだん遅くなりながら停止する */
+function stopReel(r) {
+  if (!r.spinning || r.brake) return;
+  const loop = words[r.index].length;
+  const from = r.offset;
+  const target = Math.floor(Math.random() * loop);
+  // 今の位置から1周以上まわしてから、狙った出目でぴたりと止める
+  const ahead = ((target - from) % loop + loop) % loop;
+  const to = from + loop + ahead;
+  r.brake = { from, to, start: performance.now(), dur: brakeSec * 1000, target };
+}
+
+function spinAll() { reels.forEach(spin); }
+function stopAll() {
+  // 左から順に間をあけて止める（スロットらしい見え方にする）
+  reels.forEach((r, i) => setTimeout(() => stopReel(r), i * 260));
+}
+/** スペースキー用：回っていなければ回す、回っていれば左から1つずつ止める */
+function spinOrStop() {
+  const spinningReel = reels.find((r) => r.spinning && !r.brake);
+  if (spinningReel) stopReel(spinningReel);
+  else if (!reels.some((r) => r.spinning)) spinAll();
+}
+
+$('#spinBtn').addEventListener('click', spinAll);
+$('#stopSlotBtn').addEventListener('click', stopAll);
+// リールを直接クリックしても回す／止める
+reels.forEach((r) => r.el.addEventListener('click', () => (r.spinning ? stopReel(r) : spin(r))));
+
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(64, now - last) / 1000;
+  last = now;
+  reels.forEach((r) => {
+    if (!r.spinning) return;
+    if (r.brake) {
+      const t = clamp((now - r.brake.start) / r.brake.dur, 0, 1);
+      r.offset = r.brake.from + (r.brake.to - r.brake.from) * easeOut(t);
+      if (t >= 1) {
+        r.offset = r.brake.target;
+        r.landed = r.brake.target;
+        r.spinning = false;
+        r.brake = null;
+        r.el.classList.remove('spinning');
+      }
+    } else {
+      r.offset += speed * dt;
+    }
+    applyOffset(r);
+  });
+  requestAnimationFrame(tick);
+}
+
+// ---- Excel読み込み ----
+/** A列＝Word1 / B列＝Word2 / C列＝Word3（1行目は見出しとして無視） */
+function rowsToWords(rows) {
+  const cols = [[], [], []];
+  rows.slice(1).forEach((row) => {
+    cols.forEach((col, i) => {
+      const v = String(row?.[i] ?? '').trim();
+      if (v) col.push(v);
+    });
+  });
+  return cols;
+}
+
+async function applyWorkbook(file) {
+  const cols = rowsToWords(await readSheet(file, [/^oogiri_random$/i, /oogiri.?random|大喜利.?ランダム/i]));
+  if (!cols.some((c) => c.length)) throw new Error('oogiri_randomシートにワードが見つかりませんでした');
+  words = cols;
+  reels.forEach((r) => { r.offset = 0; r.spinning = false; r.brake = null; r.el.classList.remove('spinning'); });
+  reels.forEach(buildReel);
+}
+
+$('#fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    await xlsxSync.saveWorkbook(file);
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  try {
+    await applyWorkbook(file);
+    alert(`ワードを読み込みました（Word1:${words[0].length} / Word2:${words[1].length} / Word3:${words[2].length}）`);
+  } catch (err) {
+    alert(`読み込みに失敗しました：${err.message}`);
+  }
+});
+
+// 他の画面で読み込み済みのExcelがあれば、起動時に自動で取り込む
+(async () => {
+  const file = await xlsxSync.loadWorkbook();
+  if (!file) return;
+  try { await applyWorkbook(file); } catch (err) { console.warn('[oogiri_random]', err.message); }
+})();
+
+// 他の画面でExcelが読み込まれた／クリアされたら、この画面も追従する
+xlsxSync.onWorkbookChange(async () => {
+  const file = await xlsxSync.loadWorkbook();
+  if (!file) {
+    words = SAMPLE.map((col) => [...col]);
+    reels.forEach(buildReel);
+    return;
+  }
+  try { await applyWorkbook(file); } catch (err) { console.warn('[oogiri_random]', err.message); }
+});
+
+// ---- ジャンル（自由入力） ----
+const GENRE_KEY = 'qol:ogiri-random-genre';
+const genreInput = $('#genreInput');
+genreInput.value = localStorage.getItem(GENRE_KEY) ?? 'ジャンル';
+genreInput.addEventListener('input', () => {
+  try { localStorage.setItem(GENRE_KEY, genreInput.value); } catch { /* 保存できなくても支障なし */ }
+});
+
+// ---- 設定パネル ----
+const settingsPanel = $('#settingsPanel');
+function openSettings() {
+  $('#minInput').value = Math.floor(initialSeconds / 60);
+  $('#secInput').value = initialSeconds % 60;
+  $('#speedInput').value = speed;
+  $('#brakeInput').value = brakeSec;
+  settingsPanel.hidden = false;
+}
+function closeSettings() { settingsPanel.hidden = true; }
+
+$('#settingsBtn').addEventListener('click', openSettings);
+$('#settingsCancel').addEventListener('click', closeSettings);
+$('#settingsApply').addEventListener('click', () => {
+  const m = clamp(Number($('#minInput').value) || 0, 0, 99);
+  const s = clamp(Number($('#secInput').value) || 0, 0, 59);
+  initialSeconds = m * 60 + s;
+  speed = clamp(Number($('#speedInput').value) || 9, 1, 30);
+  brakeSec = clamp(Number($('#brakeInput').value) || 1.2, 0.2, 5);
+  resetTimer();
+  closeSettings();
+});
+$('#clearWorkbookBtn').addEventListener('click', () => {
+  xlsxSync.clearWorkbook();
+  words = SAMPLE.map((col) => [...col]);
+  reels.forEach(buildReel);
+  closeSettings();
+});
+settingsPanel.addEventListener('click', (e) => { if (e.target === settingsPanel) closeSettings(); });
+
+// スペースで「回す→左から1つずつ止める」
+onKey({ ' ': spinOrStop });
+
+window.addEventListener('resize', () => reels.forEach(buildReel));
+reels.forEach(buildReel);
+renderTimer();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
