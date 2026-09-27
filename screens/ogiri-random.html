@@ -107,6 +107,7 @@
 
   /* スロット：上から下へ文字が流れ、まん中の1枠が出目になる */
   .reel {
+    --reel-fs: clamp(18px, 3.4vw, 46px);
     position: relative; min-width: 0; min-height: 0;
     background: var(--paper);
     border: 5px solid var(--ink);
@@ -118,20 +119,12 @@
   .reel .item {
     display: flex; align-items: center; justify-content: center;
     padding: 0 8px; text-align: center;
-    font-size: clamp(18px, 3.4vw, 46px); font-weight: 900; line-height: 1.1;
+    font-size: var(--reel-fs); font-weight: 900; line-height: 1.1;
     overflow-wrap: anywhere; overflow: hidden;
     color: #dcdcdc;
   }
   /* まん中の枠に来ているワードだけ黒。上下のワードはグレー */
   .reel .item.center { color: var(--ink); }
-  /* 上下の枠の外側半分を白で隠す（上段は文字の上半分、下段は文字の下半分が見えない） */
-  .reel::before, .reel::after {
-    content: ''; position: absolute; left: 0; right: 0; z-index: 1;
-    height: calc(100% / 6);
-    background: var(--paper); pointer-events: none;
-  }
-  .reel::before { top: 0; }
-  .reel::after { bottom: 0; }
   .reel.spinning { cursor: pointer; }
   .reel .empty {
     position: absolute; inset: 0;
@@ -332,7 +325,8 @@ function buildReel(r) {
     r.el.appendChild(empty);
     return;
   }
-  r.itemH = Math.max(24, r.el.clientHeight / 3);
+  // まん中の1枠＋上下の枠の半分ずつが見える高さ（1枠＝リールの半分）
+  r.itemH = Math.max(24, r.el.clientHeight / 2);
   for (let rep = 0; rep < 3; rep++) {
     list.forEach((w) => {
       const item = document.createElement('div');
@@ -352,7 +346,8 @@ function applyOffset(r) {
   const loop = list.length;
   const o = ((r.offset % loop) + loop) % loop;
   // 3回並べたうちの2周目をまん中に使う（上下の枠が空にならないように）
-  r.strip.style.transform = `translateY(${r.itemH - (o + loop) * r.itemH}px)`;
+  // 上の枠は文字の下半分、下の枠は文字の上半分だけが枠の中に見える位置にずらす
+  r.strip.style.transform = `translateY(${r.itemH / 2 - (o + loop) * r.itemH}px)`;
   // まん中の枠にいちばん近いワードだけ黒くする
   const center = r.strip.children[loop + Math.round(o)];
   if (center !== r.centerEl) {
