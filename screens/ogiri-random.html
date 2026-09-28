@@ -310,6 +310,7 @@ const reels = [...document.querySelectorAll('.reel')].map((el, i) => ({
   spinning: false,
   brake: null,    // 停止アニメーション中の状態
   landed: 0,      // 止まったときの出目（words[i]の添字）
+  bag: [],        // まだ出ていない出目（drawTargetで使う）
 }));
 
 /** リールの中身（同じ並びを3回）を作り直す */
@@ -317,6 +318,7 @@ function buildReel(r) {
   const list = words[r.index];
   r.strip.innerHTML = '';
   r.centerEl = null;
+  r.bag = [];
   r.el.querySelector('.empty')?.remove();
   if (!list.length) {
     const empty = document.createElement('div');
@@ -364,12 +366,30 @@ function spin(r) {
   r.el.classList.add('spinning');
 }
 
+/**
+ * 次の出目を決める。全ワードを1回ずつシャッフルした「袋」から順に引くので、
+ * 袋が空になるまで同じワードは出ない。袋を作り直したときも直前の出目は先頭にしない。
+ */
+function drawTarget(r) {
+  const loop = words[r.index].length;
+  if (!r.bag.length) {
+    r.bag = [...Array(loop).keys()];
+    for (let i = r.bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [r.bag[i], r.bag[j]] = [r.bag[j], r.bag[i]];
+    }
+    const last = r.bag.length - 1;
+    if (loop > 1 && r.bag[last] === r.landed) [r.bag[0], r.bag[last]] = [r.bag[last], r.bag[0]];
+  }
+  return r.bag.pop();
+}
+
 /** 止める：ランダムな出目まで、だんだん遅くなりながら停止する */
 function stopReel(r) {
   if (!r.spinning || r.brake) return;
   const loop = words[r.index].length;
   const from = r.offset;
-  const target = Math.floor(Math.random() * loop);
+  const target = drawTarget(r);
   // 今の位置から1周以上まわしてから、狙った出目でぴたりと止める
   const ahead = ((target - from) % loop + loop) % loop;
   const to = from + loop + ahead;
