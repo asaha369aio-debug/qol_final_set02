@@ -120,11 +120,38 @@
     display: flex; align-items: center; justify-content: center;
     padding: 0 8px; text-align: center;
     font-size: var(--reel-fs); font-weight: 900; line-height: 1.1;
+    /* 文字間を詰める。日本語フォントは700までしかないので縁取りで太さを足す */
+    letter-spacing: -0.08em;
+    -webkit-text-stroke: 0.045em currentColor;
     overflow-wrap: anywhere; overflow: hidden;
     color: #dcdcdc;
   }
   /* まん中の枠に来ているワードだけ黒。上下のワードはグレー */
   .reel .item.center { color: var(--ink); }
+
+  /* 止まった瞬間のエフェクト：リールがガタッと揺れ、出目がポンと弾み、枠が黄色く光る */
+  .reel.hit { animation: reel-hit .38s ease-out; }
+  .reel.hit .item.center { animation: word-pop .5s cubic-bezier(.2, 1.6, .4, 1); }
+  .reel::after {
+    content: ''; position: absolute; inset: 0; border-radius: 12px;
+    pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 0 7px #ffe500, inset 0 0 28px #ffe500;
+  }
+  .reel.hit::after { animation: frame-flash .6s ease-out; }
+  @keyframes reel-hit {
+    0% { transform: translateY(0); }
+    30% { transform: translateY(7px); }
+    60% { transform: translateY(-3px); }
+    100% { transform: translateY(0); }
+  }
+  @keyframes word-pop {
+    0% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+  @keyframes frame-flash {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   .reel.spinning { cursor: pointer; }
   .reel .empty {
     position: absolute; inset: 0;
@@ -363,6 +390,7 @@ function spin(r) {
   if (!words[r.index].length) return;
   r.spinning = true;
   r.brake = null;
+  r.el.classList.remove('hit');
   r.el.classList.add('spinning');
 }
 
@@ -394,6 +422,13 @@ function stopReel(r) {
   const ahead = ((target - from) % loop + loop) % loop;
   const to = from + loop + ahead;
   r.brake = { from, to, start: performance.now(), dur: brakeSec * 1000, target };
+}
+
+/** 止まった瞬間のエフェクトを最初から再生する */
+function playHit(r) {
+  r.el.classList.remove('hit');
+  void r.el.offsetWidth; // クラスを付け直してアニメーションを頭から流す
+  r.el.classList.add('hit');
 }
 
 function spinAll() { reels.forEach(spin); }
@@ -430,6 +465,8 @@ function tick(now) {
         r.spinning = false;
         r.brake = null;
         r.el.classList.remove('spinning');
+        applyOffset(r);
+        playHit(r);
       }
     } else {
       r.offset += speed * dt;
