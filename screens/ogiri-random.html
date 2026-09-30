@@ -244,7 +244,7 @@
     </label>
     <label>
       スロットの速さ（1秒あたりに流れる枠の数）
-      <input type="number" id="speedInput" min="1" max="30" step="0.5" value="9">
+      <input type="number" id="speedInput" min="1" max="60" step="0.5" value="20">
     </label>
     <label>
       止まるまでの時間（秒）
@@ -325,7 +325,7 @@ $$('.plus10').forEach((btn) =>
 // ---- スロット（3つのリール） ----
 // 上から下へ文字が流れ、まん中の枠が出目になる。
 // 同じ並びを3回ぶん敷き詰めておき、offsetを1周ぶんで折り返して途切れなく回す。
-let speed = 9;      // 1秒あたりに流れる枠の数
+let speed = 20;     // 1秒あたりに流れる枠の数
 let brakeSec = 1.2; // 止めてから停止するまでの時間
 
 const reels = [...document.querySelectorAll('.reel')].map((el, i) => ({
@@ -418,9 +418,11 @@ function stopReel(r) {
   const loop = words[r.index].length;
   const from = r.offset;
   const target = drawTarget(r);
-  // 今の位置から1周以上まわしてから、狙った出目でぴたりと止める
+  // 今の位置から1周以上まわしてから、狙った出目でぴたりと止める。
+  // easeOutの出だしの速さ（距離×3÷時間）が回転中の速さに近づくよう周回数を決める
   const ahead = ((target - from) % loop + loop) % loop;
-  const to = from + loop + ahead;
+  const laps = Math.max(1, Math.round((speed * brakeSec / 3 - ahead) / loop));
+  const to = from + laps * loop + ahead;
   r.brake = { from, to, start: performance.now(), dur: brakeSec * 1000, target };
 }
 
@@ -557,7 +559,7 @@ $('#settingsApply').addEventListener('click', () => {
   const m = clamp(Number($('#minInput').value) || 0, 0, 99);
   const s = clamp(Number($('#secInput').value) || 0, 0, 59);
   initialSeconds = m * 60 + s;
-  speed = clamp(Number($('#speedInput').value) || 9, 1, 30);
+  speed = clamp(Number($('#speedInput').value) || 20, 1, 60);
   brakeSec = clamp(Number($('#brakeInput').value) || 1.2, 0.2, 5);
   resetTimer();
   closeSettings();
